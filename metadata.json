@@ -1,0 +1,7 @@
+{
+  "name": "PanavenInyector",
+  "description": "A high-end digital catalog for automotive injectors with AI-powered admin monitoring, order management, and multi-step checkout logic.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
