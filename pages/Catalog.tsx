@@ -13,10 +13,9 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
   const [selectedProduct, setSelectedProduct] = useState<Injector | null>(null);
   const [modalQty, setModalQty] = useState(1);
   
-  // Estado para controlar qué medio se ve en el visor grande (URL de foto o 'video')
+  // 'video' activa el modo reproductor, string es la URL de una foto
   const [activeMedia, setActiveMedia] = useState<string | 'video' | null>(null);
 
-  // Categorías fijas
   const categories = ['All', 'INYECTORES'];
 
   const filtered = selectedCategory === 'All' 
@@ -33,14 +32,48 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
   const openModal = (product: Injector) => {
     setModalQty(1);
     setSelectedProduct(product);
-    // Por defecto mostramos la primera imagen
-    setActiveMedia(product.images[0]); 
+    setActiveMedia(product.images[0]); // Al abrir, muestra la primera foto
   };
 
-  const getYouTubeId = (url: string) => {
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-    const match = url.match(regExp);
-    return (match && match[2].length === 11) ? match[2] : null;
+  // --- LÓGICA DE REPRODUCTOR MEJORADA ---
+  const renderMediaPlayer = (url: string) => {
+    if (!url) return null;
+
+    // 1. Detectar si es YouTube (Soporta shorts, embed, watch, etc.)
+    const ytMatch = url.match(/(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})(?:\S+)?/);
+    const youtubeId = ytMatch ? ytMatch[1] : null;
+
+    if (youtubeId) {
+      // SI ES YOUTUBE -> Iframe
+      return (
+        <div className="w-full h-full bg-black rounded-xl overflow-hidden shadow-lg border-2 border-white relative">
+           <iframe 
+              className="absolute top-0 left-0 w-full h-full"
+              src={`https://www.youtube.com/embed/${youtubeId}?rel=0&autoplay=1&modestbranding=1&playsinline=1`} 
+              title="YouTube video player"
+              frameBorder="0" 
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+              allowFullScreen
+          ></iframe>
+        </div>
+      );
+    } else {
+      // SI NO ES YOUTUBE (Es un archivo .mp4 de Firebase u otro) -> Video Nativo
+      return (
+        <div className="w-full h-full bg-black rounded-xl overflow-hidden shadow-lg border-2 border-white flex items-center justify-center">
+          <video 
+            className="w-full h-full object-contain" 
+            controls 
+            autoPlay 
+            playsInline
+            controlsList="nodownload"
+          >
+            <source src={url} type="video/mp4" />
+            Your browser does not support the video tag.
+          </video>
+        </div>
+      );
+    }
   };
 
   return (
@@ -98,7 +131,7 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
         </div>
       )}
 
-      {/* MODAL DETALLE (CON GALERÍA Y VIDEO) */}
+      {/* MODAL DETALLE */}
       {selectedProduct && (
         <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
           <div className="absolute inset-0" onClick={() => setSelectedProduct(null)}></div>
@@ -106,25 +139,25 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
             <button onClick={() => setSelectedProduct(null)} className="absolute top-4 right-4 z-20 bg-slate-100 text-slate-900 w-8 h-8 rounded-full flex items-center justify-center font-bold shadow-md hover:bg-red-100 hover:text-red-600 transition">✕</button>
             
             {/* LADO IZQUIERDO: VISOR MULTIMEDIA */}
-            <div className="w-full md:w-1/2 bg-slate-100 p-6 flex flex-col justify-between">
+            <div className="w-full md:w-1/2 bg-slate-100 p-4 flex flex-col justify-center items-center h-auto">
                 
-                {/* VISOR PRINCIPAL (GRANDE) */}
-                <div className="flex-1 flex items-center justify-center w-full min-h-[250px] md:min-h-[350px] relative">
+                {/* 1. VISOR PRINCIPAL (Altura Fija h-48 para móviles) */}
+                <div className="flex items-center justify-center w-full h-48 md:h-80 relative mb-4">
+                    {/* SI MODO VIDEO ESTÁ ACTIVO Y HAY URL */}
                     {activeMedia === 'video' && selectedProduct.youtubeUrl ? (
-                        <div className="w-full aspect-video rounded-2xl overflow-hidden shadow-lg border-4 border-white bg-black">
-                            <iframe className="w-full h-full" src={`https://www.youtube.com/embed/${getYouTubeId(selectedProduct.youtubeUrl)}?rel=0&autoplay=1`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>
-                        </div>
+                        renderMediaPlayer(selectedProduct.youtubeUrl)
                     ) : (
+                        // SI NO, MUESTRA LA FOTO SELECCIONADA (O LA PRIMERA)
                         <img 
-                            src={activeMedia as string} 
+                            src={activeMedia !== 'video' && activeMedia ? activeMedia : selectedProduct.images[0]} 
                             className="max-h-full max-w-full object-contain mix-blend-multiply transition-transform duration-300 hover:scale-110 cursor-zoom-in" 
                         />
                     )}
                 </div>
 
-                {/* TIRA DE MINIATURAS (FOTOS + VIDEO) */}
-                <div className="flex gap-3 mt-6 overflow-x-auto justify-center pb-2">
-                    {/* Botones de Fotos */}
+                {/* 2. TIRA DE MINIATURAS (FOTOS + VIDEO) */}
+                <div className="flex gap-3 overflow-x-auto justify-center w-full px-2 py-2">
+                    {/* Fotos */}
                     {selectedProduct.images.map((img, idx) => (
                         <button 
                             key={idx} 
@@ -135,7 +168,7 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
                         </button>
                     ))}
 
-                    {/* Botón de Video (Si existe) */}
+                    {/* Botón VIDEO (Solo aparece si el admin puso un link) */}
                     {selectedProduct.youtubeUrl && (
                         <button 
                             onClick={() => setActiveMedia('video')}
@@ -147,37 +180,36 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
                 </div>
             </div>
             
-            {/* LADO DERECHO: DATOS Y COMPRA */}
+            {/* LADO DERECHO: DATOS */}
             <div className="w-full md:w-1/2 p-6 flex flex-col overflow-y-auto bg-white">
-              <span className="text-blue-600 font-black text-[10px] uppercase tracking-widest">{selectedProduct.brand}</span>
-              <h2 className="text-2xl font-black text-slate-900 uppercase leading-tight mt-1">{selectedProduct.model}</h2>
-              <p className="text-sm font-bold text-slate-400 uppercase mt-1 tracking-widest">{selectedProduct.sku}</p>
+              <span className="text-blue-600 font-black text-[9px] uppercase tracking-widest">{selectedProduct.brand}</span>
+              <h2 className="text-xl font-black text-slate-900 uppercase leading-tight mt-1">{selectedProduct.model}</h2>
+              <p className="text-xs font-bold text-slate-400 uppercase mt-1 tracking-widest">{selectedProduct.sku}</p>
               
-              <div className="my-4 flex items-center gap-3">
-                  <span className="text-4xl font-black text-slate-900 tracking-tighter">${selectedProduct.price}</span>
-                  {selectedProduct.stock > 0 && <span className="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-1 rounded-lg uppercase">Disponible</span>}
+              <div className="my-3 flex items-center gap-3">
+                  <span className="text-3xl font-black text-slate-900 tracking-tighter">${selectedProduct.price}</span>
+                  {selectedProduct.stock > 0 && <span className="bg-green-100 text-green-700 text-[9px] font-bold px-2 py-1 rounded-lg uppercase">Disponible</span>}
               </div>
               
-              <div className="space-y-4 flex-1">
-                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 grid grid-cols-2 gap-4">
+              <div className="space-y-3 flex-1">
+                  <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 grid grid-cols-2 gap-3">
                     {Object.entries(selectedProduct.specifications).map(([key, val]) => (
-                      <div key={key}><span className="text-slate-400 block text-[9px] font-black uppercase">{key}</span><span className="text-slate-900 font-bold text-sm">{val}</span></div>
+                      <div key={key}><span className="text-slate-400 block text-[8px] font-black uppercase">{key}</span><span className="text-slate-900 font-bold text-xs">{val}</span></div>
                     ))}
                   </div>
-                  <p className="text-slate-600 text-sm leading-relaxed">{selectedProduct.description}</p>
+                  <p className="text-slate-600 text-xs leading-relaxed">{selectedProduct.description}</p>
               </div>
 
-              {/* Botón de Añadir */}
-              <div className="mt-6 pt-4 border-t border-slate-100 space-y-4">
-                 <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl">
-                    <span className="text-xs font-bold text-slate-500">Cantidad:</span>
-                    <div className="flex items-center gap-3">
-                        <button onClick={() => setModalQty(q => Math.max(1, q - 1))} className="w-10 h-10 rounded-xl bg-white border border-slate-200 shadow-sm font-black text-slate-500 hover:text-slate-900 text-lg">-</button>
-                        <span className="font-black text-xl w-8 text-center text-slate-900">{modalQty}</span>
-                        <button onClick={() => setModalQty(q => q + 1)} className="w-10 h-10 rounded-xl bg-slate-900 text-white shadow-lg shadow-slate-900/30 font-black text-lg hover:bg-black transition">+</button>
+              <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
+                 <div className="flex items-center justify-between bg-slate-50 p-2 rounded-xl">
+                    <span className="text-xs font-bold text-slate-500 ml-2">Cantidad:</span>
+                    <div className="flex items-center gap-2">
+                        <button onClick={() => setModalQty(q => Math.max(1, q - 1))} className="w-8 h-8 rounded-lg bg-white border border-slate-200 shadow-sm font-black text-slate-500 hover:text-slate-900">-</button>
+                        <span className="font-black text-lg w-6 text-center text-slate-900">{modalQty}</span>
+                        <button onClick={() => setModalQty(q => q + 1)} className="w-8 h-8 rounded-lg bg-slate-900 text-white shadow-lg shadow-slate-900/30 font-black hover:bg-black transition">+</button>
                     </div>
                  </div>
-                 <button onClick={() => { addToCart(selectedProduct, modalQty); setSelectedProduct(null); }} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-blue-600/30 hover:bg-blue-700 transition active:scale-95 text-sm">
+                 <button onClick={() => { addToCart(selectedProduct, modalQty); setSelectedProduct(null); }} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-blue-600/30 hover:bg-blue-700 transition active:scale-95 text-xs">
                     Agregar al Pedido (${(selectedProduct.price * modalQty).toFixed(2)})
                  </button>
               </div>
