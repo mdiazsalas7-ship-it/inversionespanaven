@@ -12,6 +12,9 @@ import { Orders } from './pages/Orders';
 import { OrderDetail } from './pages/OrderDetail';
 import { AdminLogin, AdminDashboard } from './pages/Admin';
 
+// URL DEL LOGO
+const LOGO_URL = "https://i.postimg.cc/x1nHCVy8/unnamed-removebg-preview.png";
+
 const App: React.FC = () => {
   const [state, setState] = useState<AppState>({ injectors: [], orders: [], cart: [], userRole: 'client' });
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
@@ -49,7 +52,6 @@ const App: React.FC = () => {
     setState(prev => {
       const existing = prev.cart.find(item => item.product.id === product.id);
       if (existing) {
-        // Si ya existe, sumamos la cantidad nueva a la que ya tenía
         return { 
           ...prev, 
           cart: prev.cart.map(item => 
@@ -59,7 +61,6 @@ const App: React.FC = () => {
           ) 
         };
       }
-      // Si es nuevo, lo agregamos con la cantidad exacta que eligió el cliente
       return { ...prev, cart: [...prev.cart, { product, quantity }] };
     });
   };
@@ -70,7 +71,6 @@ const App: React.FC = () => {
 
   // --- CREAR ORDEN (Solicitar Cotización) ---
   const createOrder = async () => {
-    // La orden nace en estado "QUOTE_REQUESTED" (Cotizando)
     const orderData = { 
       items: state.cart, 
       status: OrderStatus.QUOTE_REQUESTED, 
@@ -93,34 +93,48 @@ const App: React.FC = () => {
     if(order) await updateDoc(doc(db, "orders", id), { chat: [...order.chat, msg] });
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white font-black animate-pulse">CARGANDO PANAVEN...</div>;
+  if (loading) return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900 text-white gap-4">
+        <img src={LOGO_URL} className="w-32 h-32 animate-pulse object-contain" alt="Cargando" />
+        <p className="font-black tracking-widest text-sm text-blue-500">CARGANDO...</p>
+    </div>
+  );
 
   return (
     <HashRouter>
       <div className="min-h-screen flex flex-col font-['Outfit']">
         {/* Barra de Navegación Fija */}
         <nav className="bg-slate-950 text-white shadow-2xl sticky top-0 z-50 border-b border-white/5">
-          <div className="max-w-7xl mx-auto px-4 h-16 flex justify-between items-center">
-            <Link to="/" className="flex flex-col group">
-              <span className="text-xl font-black text-blue-500 uppercase tracking-tighter italic">Panaven</span>
-              <span className="text-[9px] text-slate-500 font-bold uppercase tracking-[0.3em] -mt-1">Inyectores</span>
+          <div className="max-w-7xl mx-auto px-4 h-20 flex justify-between items-center">
+            
+            {/* LOGO DE LA MARCA */}
+            <Link to="/" className="flex items-center gap-3 group">
+              <img 
+                src={LOGO_URL} 
+                alt="Panaven Logo" 
+                className="h-12 w-12 object-contain filter drop-shadow-[0_0_8px_rgba(59,130,246,0.5)] transition-transform group-hover:scale-110" 
+              />
+              <div className="flex flex-col">
+                <span className="text-xl font-black text-white tracking-tighter italic leading-none">PANAVEN</span>
+                <span className="text-[8px] text-blue-500 font-bold uppercase tracking-[0.4em]">Inyectores</span>
+              </div>
             </Link>
             
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-6">
               <Link to="/orders" className="text-slate-400 hover:text-white transition font-bold text-xs uppercase tracking-widest hidden md:block">Mis Pedidos</Link>
               
               {/* Iconos Móviles */}
-              <div className="flex md:hidden gap-4">
-                 <Link to="/orders" className="text-2xl text-slate-400">📦</Link>
-                 <Link to="/admin" className="text-2xl text-slate-400">🔧</Link>
+              <div className="flex md:hidden gap-6 items-center">
+                 <Link to="/orders" className="text-2xl text-slate-400 hover:text-white">📦</Link>
+                 <Link to="/admin" className="text-2xl text-slate-400 hover:text-white">🔧</Link>
               </div>
 
-              <Link to="/admin" className="text-blue-600 font-black text-xs uppercase tracking-widest hidden md:block">Admin</Link>
+              <Link to="/admin" className="text-blue-500 hover:text-blue-400 font-black text-xs uppercase tracking-widest hidden md:block">Admin</Link>
               
               <Link to="/cart" className="relative group">
                 <span className="text-2xl">🛒</span>
                 {state.cart.length > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full shadow-lg border-2 border-slate-950">
+                  <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full shadow-lg border-2 border-slate-950 animate-bounce">
                     {state.cart.reduce((acc, item) => acc + item.quantity, 0)}
                   </span>
                 )}
@@ -130,7 +144,7 @@ const App: React.FC = () => {
         </nav>
 
         {/* Contenido Principal */}
-        <main className="flex-1 max-w-7xl mx-auto w-full p-4">
+        <main className="flex-1 max-w-7xl mx-auto w-full p-4 md:p-8">
           <Routes>
             <Route path="/" element={<Catalog injectors={state.injectors} addToCart={addToCart} />} />
             <Route path="/cart" element={<Cart cart={state.cart} removeFromCart={removeFromCart} createOrder={createOrder} />} />

@@ -195,7 +195,7 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {state.injectors.map(item => (
               <div key={item.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex gap-4 items-center group hover:border-blue-300 transition-all">
-                <img src={item.images[0]} className="w-16 h-16 rounded-xl object-cover bg-slate-50" />
+                <img src={item.images[0]} className="w-20 h-20 rounded-xl object-cover bg-slate-50" />
                 <div className="flex-1 min-w-0">
                   <p className="font-black text-sm text-slate-900 uppercase truncate">{item.model}</p>
                   <p className="text-[9px] text-slate-400 font-bold uppercase">{item.brand} | {item.sku}</p>
