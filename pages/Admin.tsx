@@ -5,7 +5,7 @@ import { db } from '../firebase';
 import { AppState, Injector, Order, OrderStatus } from '../types';
 import { generateProductData, getAdminInsights, getTechnicalAdvice } from '../services/geminiService';
 import { uploadImage } from '../services/storageService';
-import { generateQuotePDF } from '../services/pdfService'; // Importamos el generador de PDF
+import { generateQuotePDF } from '../services/pdfService';
 
 // --- LOGIN DEL ADMIN ---
 export const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
@@ -41,7 +41,6 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
       
       income += totalPaid; // Dinero real
 
-      // Si la orden está activa (Crédito, Aprobada, Enviada), lo que falta es deuda
       if (order.status === OrderStatus.CREDIT_ACTIVE || order.status === OrderStatus.APPROVED || order.status === OrderStatus.SHIPPED) {
         const debt = totalOrder - totalPaid;
         if (debt > 0) receivables += debt;
@@ -52,14 +51,13 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
 
   // Estados de Modales
   const [showProductModal, setShowProductModal] = useState(false);
-  const [showSaleModal, setShowSaleModal] = useState(false); // Modal de Cotización Premium
+  const [showSaleModal, setShowSaleModal] = useState(false);
   
   // Estados Producto (Inventario)
   const [editingProduct, setEditingProduct] = useState<Injector | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isUploading, setIsUploading] = useState([false, false, false]);
   
-  // Formulario Inventario
   const [formName, setFormName] = useState('');
   const [formBrand, setFormBrand] = useState('');
   const [formSku, setFormSku] = useState('');
@@ -75,7 +73,8 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
   const [saleClientName, setSaleClientName] = useState('');
   const [saleClientRif, setSaleClientRif] = useState('');
   const [saleClientBusiness, setSaleClientBusiness] = useState('');
-  const [saleCart, setSaleCart] = useState<{ product: Injector; quantity: number }[]>([]);
+  // MODIFICADO: Ahora el carrito guarda un 'customPrice'
+  const [saleCart, setSaleCart] = useState<{ product: Injector; quantity: number; customPrice: number }[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
 
   // --- LOGICA INVENTARIO ---
@@ -128,56 +127,82 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
   // --- LOGICA VENTA MANUAL (PREMIUM) ---
   const addToSaleCart = (item: Injector) => {
     const existing = saleCart.find(i => i.product.id === item.id);
-    if (existing) setSaleCart(saleCart.map(i => i.product.id === item.id ? { ...i, quantity: i.quantity + 1 } : i));
-    else setSaleCart([...saleCart, { product: item, quantity: 1 }]);
+    if (existing) {
+      setSaleCart(saleCart.map(i => i.product.id === item.id ? { ...i, quantity: i.quantity + 1 } : i));
+    } else {
+      // Al agregar, usamos el precio base, pero lo guardamos como 'customPrice' para poder editarlo luego
+      setSaleCart([...saleCart, { product: item, quantity: 1, customPrice: item.price }]);
+    }
+  };
+
+  // Función para modificar precio manualmente en el carrito
+  const updateItemPrice = (id: string, newPrice: number) => {
+    setSaleCart(saleCart.map(item => 
+      item.product.id === id ? { ...item, customPrice: newPrice } : item
+    ));
   };
 
   const removeFromSaleCart = (id: string) => {
     setSaleCart(saleCart.filter(i => i.product.id !== id));
   };
 
-  // FUNCIÓN CLAVE: CREAR PEDIDO + PDF + DEUDA
   const createPremiumOrder = async () => {
     if (!saleClientName || !saleClientRif || saleCart.length === 0) { 
       alert("Faltan datos del cliente o productos."); 
       return; 
     }
 
+    // Transformamos el carrito para que el producto guardado tenga el precio modificado
+    const itemsForDB = saleCart.map(item => ({
+      quantity: item.quantity,
+      product: {
+        ...item.product,
+        price: item.customPrice // Sobreescribimos el precio solo para esta orden
+      }
+    }));
+
     const orderData: Omit<Order, 'id'> = {
-      items: saleCart,
-      status: OrderStatus.CREDIT_ACTIVE, // Directo a "Por Cobrar"
+      items: itemsForDB,
+      status: OrderStatus.CREDIT_ACTIVE,
       customerName: saleClientName,
       clientRIF: saleClientRif,
       clientBusinessName: saleClientBusiness,
       chat: [],
       createdAt: Date.now(),
-      payments: [] // Inicia sin pagos
+      payments: []
     };
 
-    // 1. Guardar en Base de Datos
     const docRef = await addDoc(collection(db, "orders"), orderData);
     
-    // 2. Generar y Descargar PDF
+    // Para el PDF también usamos los items con precio modificado
     const orderForPdf = { ...orderData, id: docRef.id } as Order;
     generateQuotePDF(orderForPdf);
 
-    // 3. Limpiar
     setShowSaleModal(false);
     setSaleCart([]); setSaleClientName(''); setSaleClientRif(''); setSaleClientBusiness('');
-    alert("Cotización generada y deuda registrada exitosamente.");
+    alert("Cotización generada con precios personalizados.");
   };
+
+  // URL del Logo (Para mantener el diseño)
+  const LOGO_URL = "https://i.postimg.cc/x1nHCVy8/unnamed_removebg_preview.png";
 
   return (
     <div className="space-y-8 animate-fadeIn pb-24">
       {/* HEADER */}
       <header className="flex flex-col md:flex-row justify-between items-center bg-white p-6 rounded-3xl border border-slate-100 shadow-xl gap-4">
-        <div className="text-center md:text-left">
-          <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase italic">Panel Admin</h1>
-          <div className="flex gap-4 items-center justify-center md:justify-start mt-2">
-             <button onClick={onLogout} className="text-[10px] font-bold text-red-500 uppercase tracking-widest hover:underline">Cerrar Sesión</button>
-             <span className="text-[10px] font-black text-green-600 bg-green-50 px-2 py-1 rounded-lg">Caja: ${finances.income}</span>
+        <div className="flex items-center gap-4">
+          <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center p-2 shadow-lg">
+             <img src={LOGO_URL} className="w-full h-full object-contain" />
+          </div>
+          <div className="text-center md:text-left">
+            <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase italic">Panel Admin</h1>
+            <div className="flex gap-4 items-center justify-center md:justify-start mt-1">
+              <button onClick={onLogout} className="text-[10px] font-bold text-red-500 uppercase tracking-widest hover:underline">Cerrar Sesión</button>
+              <span className="text-[10px] font-black text-green-600 bg-green-50 px-2 py-1 rounded-lg">Caja: ${finances.income}</span>
+            </div>
           </div>
         </div>
+        
         <div className="flex bg-slate-100 p-1 rounded-2xl gap-1">
           <button onClick={() => setActiveTab('inventory')} className={`px-4 py-2 rounded-xl font-bold text-[10px] md:text-xs uppercase tracking-widest transition-all ${activeTab === 'inventory' ? 'bg-white text-blue-600 shadow-md' : 'text-slate-400'}`}>Inventario</button>
           <button onClick={() => setActiveTab('orders')} className={`px-4 py-2 rounded-xl font-bold text-[10px] md:text-xs uppercase tracking-widest transition-all ${activeTab === 'orders' ? 'bg-white text-blue-600 shadow-md' : 'text-slate-400'}`}>Pedidos</button>
@@ -213,7 +238,6 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
         <div className="space-y-6">
           <div className="flex justify-between items-center">
              <h2 className="text-xl font-black text-slate-900 uppercase">Bandeja de Pedidos</h2>
-             {/* BOTÓN PARA CLIENTES PREMIUM */}
              <button onClick={() => setShowSaleModal(true)} className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg hover:bg-blue-700 transition">📝 Nueva Cotización Premium</button>
           </div>
           <div className="space-y-3">
@@ -270,16 +294,12 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
           </div>
 
           <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-            <h3 className="text-lg font-black text-slate-900 uppercase mb-6 flex items-center gap-2">
-               <span>📉</span> Detalle de Cobros Pendientes
-            </h3>
+            <h3 className="text-lg font-black text-slate-900 uppercase mb-6 flex items-center gap-2"><span>📉</span> Detalle de Cobros Pendientes</h3>
             <div className="space-y-4">
               {state.orders.map(order => {
                 const total = order.items.reduce((a,b) => a + (b.product.price * b.quantity), 0);
                 const paid = (order.payments || []).reduce((a,b) => a + b.amount, 0);
                 const debt = total - paid;
-
-                // Solo mostramos si hay deuda y la orden está aprobada/activa
                 if (debt > 0 && (order.status === OrderStatus.CREDIT_ACTIVE || order.status === OrderStatus.APPROVED || order.status === OrderStatus.SHIPPED)) {
                     return (
                         <div key={order.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:border-orange-200 transition-all">
@@ -299,12 +319,7 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
                 }
                 return null;
               })}
-              
-              {finances.receivables === 0 && (
-                <div className="text-center py-10 text-slate-400 text-xs font-bold uppercase">
-                    🎉 Excelente. No hay cuentas por cobrar.
-                </div>
-              )}
+              {finances.receivables === 0 && <div className="text-center py-10 text-slate-400 text-xs font-bold uppercase">🎉 Excelente. No hay cuentas por cobrar.</div>}
             </div>
           </div>
         </div>
@@ -342,21 +357,28 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
                       <input value={saleClientBusiness} onChange={e => setSaleClientBusiness(e.target.value)} placeholder="Nombre del Negocio (Opcional)" className="w-full border-2 p-3 rounded-xl text-sm font-bold outline-none" />
                   </div>
                   
-                  <h4 className="text-xs font-black uppercase text-slate-400 mb-4">Items</h4>
+                  <h4 className="text-xs font-black uppercase text-slate-400 mb-4">Items (Precio Editable)</h4>
                   <div className="space-y-2 mb-6 flex-1 overflow-y-auto">
                       {saleCart.map((item, idx) => (
                           <div key={idx} className="flex justify-between items-center text-xs font-bold p-2 bg-slate-50 rounded-lg group">
-                              <span>{item.quantity} x {item.product.model.substring(0, 15)}...</span>
+                              <span className="flex-1 mr-2">{item.quantity} x {item.product.model.substring(0, 15)}...</span>
                               <div className="flex items-center gap-2">
-                                <span>${item.product.price * item.quantity}</span>
-                                <button onClick={() => removeFromSaleCart(item.product.id)} className="text-red-400 hover:text-red-600">×</button>
+                                {/* INPUT DE PRECIO EDITABLE */}
+                                <span className="text-slate-400">$</span>
+                                <input 
+                                  type="number" 
+                                  value={item.customPrice} 
+                                  onChange={(e) => updateItemPrice(item.product.id, Number(e.target.value))}
+                                  className="w-16 border rounded p-1 text-right font-black text-blue-600 outline-none focus:border-blue-500"
+                                />
+                                <button onClick={() => removeFromSaleCart(item.product.id)} className="text-red-400 hover:text-red-600 ml-1">×</button>
                               </div>
                           </div>
                       ))}
                   </div>
                   
                   <div className="mt-auto pt-4 border-t">
-                      <div className="flex justify-between text-xl font-black text-slate-900 mb-4"><span>Total:</span><span>${saleCart.reduce((a,b) => a + (b.product.price * b.quantity), 0)}</span></div>
+                      <div className="flex justify-between text-xl font-black text-slate-900 mb-4"><span>Total:</span><span>${saleCart.reduce((a,b) => a + (b.customPrice * b.quantity), 0)}</span></div>
                       
                       <button onClick={createPremiumOrder} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl hover:bg-black flex items-center justify-center gap-2">
                          <span>📄 Generar PDF y Cargar Deuda</span>
