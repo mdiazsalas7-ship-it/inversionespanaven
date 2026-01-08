@@ -13,7 +13,6 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
   const [selectedProduct, setSelectedProduct] = useState<Injector | null>(null);
   const [modalQty, setModalQty] = useState(1);
   
-  // 'video' activa el modo reproductor, string es la URL de una foto
   const [activeMedia, setActiveMedia] = useState<string | 'video' | null>(null);
 
   const categories = ['All', 'INYECTORES'];
@@ -32,24 +31,24 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
   const openModal = (product: Injector) => {
     setModalQty(1);
     setSelectedProduct(product);
-    setActiveMedia(product.images[0]); // Al abrir, muestra la primera foto
+    setActiveMedia(product.images[0]); 
   };
 
-  // --- LÓGICA DE REPRODUCTOR MEJORADA ---
+  // --- REPRODUCTOR MEJORADO (SOLUCIÓN MÓVIL) ---
   const renderMediaPlayer = (url: string) => {
     if (!url) return null;
 
-    // 1. Detectar si es YouTube (Soporta shorts, embed, watch, etc.)
+    // Detectar YouTube
     const ytMatch = url.match(/(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})(?:\S+)?/);
     const youtubeId = ytMatch ? ytMatch[1] : null;
 
     if (youtubeId) {
-      // SI ES YOUTUBE -> Iframe
+      // CORRECCIÓN: Agregamos 'mute=1' para que el Autoplay funcione en celulares
       return (
         <div className="w-full h-full bg-black rounded-xl overflow-hidden shadow-lg border-2 border-white relative">
            <iframe 
               className="absolute top-0 left-0 w-full h-full"
-              src={`https://www.youtube.com/embed/${youtubeId}?rel=0&autoplay=1&modestbranding=1&playsinline=1`} 
+              src={`https://www.youtube.com/embed/${youtubeId}?rel=0&autoplay=1&mute=1&modestbranding=1&playsinline=1`} 
               title="YouTube video player"
               frameBorder="0" 
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
@@ -58,18 +57,19 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
         </div>
       );
     } else {
-      // SI NO ES YOUTUBE (Es un archivo .mp4 de Firebase u otro) -> Video Nativo
+      // VIDEO NATIVO (MP4 Directo)
       return (
         <div className="w-full h-full bg-black rounded-xl overflow-hidden shadow-lg border-2 border-white flex items-center justify-center">
           <video 
             className="w-full h-full object-contain" 
             controls 
             autoPlay 
+            muted // Importante para móviles
             playsInline
             controlsList="nodownload"
           >
             <source src={url} type="video/mp4" />
-            Your browser does not support the video tag.
+            No se puede reproducir el video.
           </video>
         </div>
       );
@@ -168,7 +168,7 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
                         </button>
                     ))}
 
-                    {/* Botón VIDEO (Solo aparece si el admin puso un link) */}
+                    {/* Botón de Video (Solo aparece si el admin puso un link) */}
                     {selectedProduct.youtubeUrl && (
                         <button 
                             onClick={() => setActiveMedia('video')}
