@@ -12,14 +12,26 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedProduct, setSelectedProduct] = useState<Injector | null>(null);
   const [modalQty, setModalQty] = useState(1);
+  const [searchTerm, setSearchTerm] = useState(''); // ESTADO PARA LA LUPA
   
   const [activeMedia, setActiveMedia] = useState<string | 'video' | null>(null);
 
   const categories = ['All', 'INYECTORES'];
 
-  const filtered = selectedCategory === 'All' 
-    ? injectors 
-    : selectedCategory === 'INYECTORES' ? injectors : injectors;
+  // LÓGICA DE FILTRADO (CATEGORÍA + BÚSQUEDA)
+  const filtered = injectors.filter(item => {
+    // 1. Filtro de Categoría (Por ahora es simple, preparado para futuro)
+    const categoryMatch = selectedCategory === 'All' ? true : true; 
+    
+    // 2. Filtro de Búsqueda (Busca en Marca, Modelo o SKU)
+    const term = searchTerm.toLowerCase();
+    const searchMatch = 
+        item.model.toLowerCase().includes(term) || 
+        item.brand.toLowerCase().includes(term) || 
+        item.sku.toLowerCase().includes(term);
+
+    return categoryMatch && searchMatch;
+  });
 
   const totalAmount = cart.reduce((acc, item) => acc + (item.product.price * item.quantity), 0);
   const totalItems = cart.reduce((acc, item) => acc + item.quantity, 0);
@@ -34,44 +46,36 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
     setActiveMedia(product.images[0]); 
   };
 
-  // --- REPRODUCTOR MEJORADO (SOLUCIÓN MÓVIL) ---
+  // --- REPRODUCTOR HÍBRIDO ---
   const renderMediaPlayer = (url: string) => {
     if (!url) return null;
-
-    // Detectar YouTube
     const ytMatch = url.match(/(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})(?:\S+)?/);
     const youtubeId = ytMatch ? ytMatch[1] : null;
 
     if (youtubeId) {
-      // CORRECCIÓN: Agregamos 'mute=1' para que el Autoplay funcione en celulares
       return (
-        <div className="w-full h-full bg-black rounded-xl overflow-hidden shadow-lg border-2 border-white relative">
-           <iframe 
-              className="absolute top-0 left-0 w-full h-full"
-              src={`https://www.youtube.com/embed/${youtubeId}?rel=0&autoplay=1&mute=1&modestbranding=1&playsinline=1`} 
-              title="YouTube video player"
-              frameBorder="0" 
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-              allowFullScreen
-          ></iframe>
-        </div>
+        <iframe 
+            className="w-full h-full rounded-2xl" 
+            src={`https://www.youtube.com/embed/${youtubeId}?rel=0&autoplay=1&mute=1&modestbranding=1&playsinline=1`} 
+            title="Video"
+            frameBorder="0" 
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+            allowFullScreen
+        ></iframe>
       );
     } else {
-      // VIDEO NATIVO (MP4 Directo)
       return (
-        <div className="w-full h-full bg-black rounded-xl overflow-hidden shadow-lg border-2 border-white flex items-center justify-center">
-          <video 
-            className="w-full h-full object-contain" 
-            controls 
-            autoPlay 
-            muted // Importante para móviles
-            playsInline
-            controlsList="nodownload"
-          >
-            <source src={url} type="video/mp4" />
-            No se puede reproducir el video.
-          </video>
-        </div>
+        <video 
+          className="w-full h-full rounded-2xl object-cover bg-black" 
+          controls 
+          autoPlay 
+          muted 
+          playsInline 
+          loop
+        >
+          <source src={url} type="video/mp4" />
+          Tu navegador no soporta este video.
+        </video>
       );
     }
   };
@@ -79,46 +83,71 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
   return (
     <div className="pb-32 animate-fadeIn bg-slate-50 min-h-screen">
       
-      {/* BARRA DE CATEGORÍAS */}
-      <div className="sticky top-0 z-40 bg-white py-3 px-4 shadow-sm mb-4 border-b border-slate-100">
-         <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+      {/* HEADER FIJO: BUSCADOR + CATEGORÍAS */}
+      <div className="sticky top-0 z-40 bg-slate-50/95 backdrop-blur-md pb-2 border-b border-slate-200 shadow-sm">
+         
+         {/* 1. BARRA DE BÚSQUEDA (LUPA) */}
+         <div className="p-4 pb-2">
+            <div className="relative group">
+                <span className="absolute left-4 top-3.5 text-slate-400 text-lg group-focus-within:text-blue-500 transition-colors">🔍</span>
+                <input 
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Buscar por nombre, marca o código..." 
+                    className="w-full pl-12 pr-4 py-3 rounded-2xl border-none shadow-sm bg-white font-bold text-slate-700 outline-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 transition-all placeholder:text-slate-300 placeholder:font-medium"
+                />
+                {searchTerm && (
+                    <button onClick={() => setSearchTerm('')} className="absolute right-4 top-3.5 text-slate-300 hover:text-slate-500 font-bold">✕</button>
+                )}
+            </div>
+         </div>
+
+         {/* 2. PILLS DE CATEGORÍAS */}
+         <div className="flex gap-2 overflow-x-auto px-4 pb-2 scrollbar-hide">
             {categories.map(cat => (
-              <button key={cat} onClick={() => setSelectedCategory(cat)} className={`flex-shrink-0 px-6 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all border ${selectedCategory === cat ? 'bg-yellow-400 text-slate-900 border-yellow-400 shadow-sm' : 'bg-white text-slate-500 border-slate-200'}`}>{cat}</button>
+              <button key={cat} onClick={() => setSelectedCategory(cat)} className={`flex-shrink-0 px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${selectedCategory === cat ? 'bg-slate-900 text-white border-slate-900 shadow-md' : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'}`}>{cat}</button>
             ))}
-            <div className="w-4 flex-shrink-0"></div>
+            <div className="w-2 flex-shrink-0"></div>
          </div>
       </div>
 
       {/* LISTA DE PRODUCTOS */}
-      <div className="px-4 flex flex-col gap-3">
-        {filtered.map(item => {
-          const qty = getQuantity(item.id);
-          return (
-            <div key={item.id} className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex gap-3 relative">
-              <div className="w-24 h-24 bg-slate-100 rounded-xl flex-shrink-0 overflow-hidden border border-slate-100 cursor-pointer" onClick={() => openModal(item)}>
-                <img src={item.images[0]} alt={item.model} className="w-full h-full object-cover mix-blend-multiply" />
-              </div>
-              <div className="flex-1 min-w-0 flex flex-col justify-between py-1">
-                <div onClick={() => openModal(item)} className="cursor-pointer">
-                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5 block">{item.brand}</span>
-                    <h3 className="font-bold text-sm text-slate-800 leading-tight mb-1 line-clamp-2">{item.model}</h3>
-                    {item.stock === 0 ? <span className="inline-block bg-red-50 text-red-500 text-[10px] font-bold px-2 py-0.5 rounded-md border border-red-100">Agotado</span> : item.stock < 5 ? <span className="inline-block bg-red-50 text-red-500 text-[10px] font-bold px-2 py-0.5 rounded-md border border-red-100">Quedan {item.stock}</span> : <span className="inline-block bg-green-50 text-green-600 text-[10px] font-bold px-2 py-0.5 rounded-md border border-green-100">Disponible</span>}
-                </div>
-                <div className="flex items-end justify-between mt-2"><span className="text-lg font-black text-slate-900">${item.price}</span></div>
-              </div>
-              <div className="flex flex-col justify-between items-end pl-1">
-                <button onClick={() => openModal(item)} className="text-blue-400 hover:text-blue-600 p-1"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></button>
-                {item.stock > 0 && (
-                    <div className="flex items-center border border-slate-300 rounded-full h-8 min-w-[90px] bg-white mt-auto shadow-sm">
-                        <button onClick={() => removeFromCart(item.id)} className="w-8 h-full flex items-center justify-center text-slate-400 hover:text-red-500 text-lg font-bold pb-1 active:scale-90 transition-transform">−</button>
-                        <span className="flex-1 text-center font-black text-sm text-slate-900 px-1">{qty}</span>
-                        <button onClick={() => addToCart(item, 1)} className="w-8 h-full flex items-center justify-center text-slate-900 hover:text-blue-600 text-lg font-bold pb-1 active:scale-90 transition-transform">+</button>
-                    </div>
-                )}
-              </div>
+      <div className="px-4 flex flex-col gap-3 mt-4">
+        {filtered.length === 0 ? (
+            <div className="text-center py-20 text-slate-400">
+                <p className="text-4xl mb-2">😕</p>
+                <p className="font-bold text-sm">No encontramos "{searchTerm}"</p>
             </div>
-          );
-        })}
+        ) : (
+            filtered.map(item => {
+            const qty = getQuantity(item.id);
+            return (
+                <div key={item.id} className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex gap-3 relative animate-slideUp">
+                <div className="w-24 h-24 bg-slate-100 rounded-xl flex-shrink-0 overflow-hidden border border-slate-100 cursor-pointer" onClick={() => openModal(item)}>
+                    <img src={item.images[0]} alt={item.model} className="w-full h-full object-cover mix-blend-multiply" />
+                </div>
+                <div className="flex-1 min-w-0 flex flex-col justify-between py-1">
+                    <div onClick={() => openModal(item)} className="cursor-pointer">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5 block">{item.brand}</span>
+                        <h3 className="font-bold text-sm text-slate-800 leading-tight mb-1 line-clamp-2">{item.model}</h3>
+                        {item.stock === 0 ? <span className="inline-block bg-red-50 text-red-500 text-[10px] font-bold px-2 py-0.5 rounded-md border border-red-100">Agotado</span> : item.stock < 5 ? <span className="inline-block bg-red-50 text-red-500 text-[10px] font-bold px-2 py-0.5 rounded-md border border-red-100">Quedan {item.stock}</span> : <span className="inline-block bg-green-50 text-green-600 text-[10px] font-bold px-2 py-0.5 rounded-md border border-green-100">Disponible</span>}
+                    </div>
+                    <div className="flex items-end justify-between mt-2"><span className="text-lg font-black text-slate-900">${item.price}</span></div>
+                </div>
+                <div className="flex flex-col justify-between items-end pl-1">
+                    <button onClick={() => openModal(item)} className="text-blue-400 hover:text-blue-600 p-1"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></button>
+                    {item.stock > 0 && (
+                        <div className="flex items-center border border-slate-300 rounded-full h-8 min-w-[90px] bg-white mt-auto shadow-sm">
+                            <button onClick={() => removeFromCart(item.id)} className="w-8 h-full flex items-center justify-center text-slate-400 hover:text-red-500 text-lg font-bold pb-1 active:scale-90 transition-transform">−</button>
+                            <span className="flex-1 text-center font-black text-sm text-slate-900 px-1">{qty}</span>
+                            <button onClick={() => addToCart(item, 1)} className="w-8 h-full flex items-center justify-center text-slate-900 hover:text-blue-600 text-lg font-bold pb-1 active:scale-90 transition-transform">+</button>
+                        </div>
+                    )}
+                </div>
+                </div>
+            );
+            })
+        )}
       </div>
 
       {/* BARRA INFERIOR */}
@@ -140,41 +169,25 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
             
             {/* LADO IZQUIERDO: VISOR MULTIMEDIA */}
             <div className="w-full md:w-1/2 bg-slate-100 p-4 flex flex-col justify-center items-center h-auto">
-                
-                {/* 1. VISOR PRINCIPAL (Altura Fija h-48 para móviles) */}
                 <div className="flex items-center justify-center w-full h-48 md:h-80 relative mb-4">
-                    {/* SI MODO VIDEO ESTÁ ACTIVO Y HAY URL */}
                     {activeMedia === 'video' && selectedProduct.youtubeUrl ? (
                         renderMediaPlayer(selectedProduct.youtubeUrl)
                     ) : (
-                        // SI NO, MUESTRA LA FOTO SELECCIONADA (O LA PRIMERA)
                         <img 
                             src={activeMedia !== 'video' && activeMedia ? activeMedia : selectedProduct.images[0]} 
                             className="max-h-full max-w-full object-contain mix-blend-multiply transition-transform duration-300 hover:scale-110 cursor-zoom-in" 
                         />
                     )}
                 </div>
-
-                {/* 2. TIRA DE MINIATURAS (FOTOS + VIDEO) */}
-                <div className="flex gap-3 overflow-x-auto justify-center w-full px-2 py-2">
-                    {/* Fotos */}
+                <div className="flex gap-2 mt-4 overflow-x-auto justify-center w-full px-2">
                     {selectedProduct.images.map((img, idx) => (
-                        <button 
-                            key={idx} 
-                            onClick={() => setActiveMedia(img)}
-                            className={`w-14 h-14 rounded-xl border-2 overflow-hidden flex-shrink-0 transition-all ${activeMedia === img ? 'border-blue-600 shadow-lg scale-110' : 'border-slate-300 opacity-60 hover:opacity-100'}`}
-                        >
+                        <button key={idx} onClick={() => setActiveMedia(img)} className={`w-12 h-12 rounded-lg border-2 overflow-hidden flex-shrink-0 transition-all ${activeMedia === img ? 'border-blue-600 shadow-md scale-105' : 'border-slate-300 opacity-60 hover:opacity-100'}`}>
                             <img src={img} className="w-full h-full object-cover" />
                         </button>
                     ))}
-
-                    {/* Botón de Video (Solo aparece si el admin puso un link) */}
                     {selectedProduct.youtubeUrl && (
-                        <button 
-                            onClick={() => setActiveMedia('video')}
-                            className={`w-14 h-14 rounded-xl border-2 flex items-center justify-center flex-shrink-0 transition-all bg-red-600 text-white ${activeMedia === 'video' ? 'border-red-800 shadow-lg scale-110 ring-2 ring-red-300' : 'border-red-600 opacity-80 hover:opacity-100'}`}
-                        >
-                            <span className="text-xl">▶</span>
+                        <button onClick={() => setActiveMedia('video')} className={`w-12 h-12 rounded-lg border-2 flex items-center justify-center flex-shrink-0 transition-all bg-red-600 text-white ${activeMedia === 'video' ? 'border-red-800 shadow-md scale-105 ring-2 ring-red-300' : 'border-red-600 opacity-80 hover:opacity-100'}`}>
+                            <span className="text-sm">▶</span>
                         </button>
                     )}
                 </div>
