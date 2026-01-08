@@ -16,6 +16,7 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
   // Estado para controlar qué medio se ve en el visor grande (URL de foto o 'video')
   const [activeMedia, setActiveMedia] = useState<string | 'video' | null>(null);
 
+  // Categorías fijas
   const categories = ['All', 'INYECTORES'];
 
   const filtered = selectedCategory === 'All' 
