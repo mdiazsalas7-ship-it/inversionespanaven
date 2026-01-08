@@ -12,8 +12,8 @@ import { Orders } from './pages/Orders';
 import { OrderDetail } from './pages/OrderDetail';
 import { AdminLogin, AdminDashboard } from './pages/Admin';
 
-// URL DEL LOGO
-const LOGO_URL = "https://i.postimg.cc/x1nHCVy8/unnamed-removebg-preview.png";
+// URL DEL LOGO CORRECTO
+const LOGO_URL = "https://i.postimg.cc/x1nHCVy8/unnamed_removebg_preview.png";
 
 const App: React.FC = () => {
   const [state, setState] = useState<AppState>({ injectors: [], orders: [], cart: [], userRole: 'client' });
@@ -47,7 +47,7 @@ const App: React.FC = () => {
     return () => unsub();
   }, []);
 
-  // --- LÓGICA DEL CARRITO (Actualizada para soportar cantidades del modal) ---
+  // --- LÓGICA DEL CARRITO (Soporte para Cantidades y Resta) ---
   const addToCart = (product: Injector, quantity: number = 1) => {
     setState(prev => {
       const existing = prev.cart.find(item => item.product.id === product.id);
@@ -65,8 +65,20 @@ const App: React.FC = () => {
     });
   };
 
-  const removeFromCart = (id: string) => {
-    setState(prev => ({ ...prev, cart: prev.cart.filter(item => item.product.id !== id) }));
+  // Función para RESTAR 1 unidad (Usada en el Catálogo nuevo)
+  const decrementCartItem = (productId: string) => {
+    setState(prev => {
+      const existing = prev.cart.find(item => item.product.id === productId);
+      if (existing?.quantity === 1) {
+        return { ...prev, cart: prev.cart.filter(item => item.product.id !== productId) };
+      }
+      return {
+        ...prev,
+        cart: prev.cart.map(item => 
+          item.product.id === productId ? { ...item, quantity: item.quantity - 1 } : item
+        )
+      };
+    });
   };
 
   // --- CREAR ORDEN (Solicitar Cotización) ---
@@ -146,8 +158,18 @@ const App: React.FC = () => {
         {/* Contenido Principal */}
         <main className="flex-1 max-w-7xl mx-auto w-full p-4 md:p-8">
           <Routes>
-            <Route path="/" element={<Catalog injectors={state.injectors} addToCart={addToCart} />} />
-            <Route path="/cart" element={<Cart cart={state.cart} removeFromCart={removeFromCart} createOrder={createOrder} />} />
+            <Route 
+              path="/" 
+              element={
+                <Catalog 
+                  injectors={state.injectors} 
+                  cart={state.cart} 
+                  addToCart={addToCart} 
+                  removeFromCart={decrementCartItem} 
+                />
+              } 
+            />
+            <Route path="/cart" element={<Cart cart={state.cart} removeFromCart={(id) => setState(p => ({...p, cart: p.cart.filter(i => i.product.id !== id)}))} createOrder={createOrder} />} />
             <Route path="/orders" element={<Orders orders={state.orders} role="client" />} />
             <Route path="/order/:id" element={<OrderDetail orders={state.orders} role={isAdminLoggedIn ? 'admin' : 'client'} updateStatus={updateStatus} addChat={addChat} />} />
             <Route path="/admin" element={isAdminLoggedIn ? <AdminDashboard state={state} updateStatus={updateStatus} addChat={addChat} onLogout={() => setIsAdminLoggedIn(false)} /> : <AdminLogin onLogin={() => setIsAdminLoggedIn(true)} />} />
