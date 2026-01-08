@@ -1,4 +1,3 @@
-
 export interface Injector {
   id: string;
   brand: string;
@@ -9,22 +8,29 @@ export interface Injector {
   description: string;
   specifications: { [key: string]: string };
   images: string[];
-  mlLink?: string;
-}
-
-export enum OrderStatus {
-  QUOTE_REQUESTED = 'QUOTE_REQUESTED',
-  APPROVED = 'APPROVED',
-  PAID = 'PAID',
-  SHIPPED = 'SHIPPED',
-  COMPLETED = 'COMPLETED',
-  REJECTED = 'REJECTED'
 }
 
 export interface ChatMessage {
-  sender: 'client' | 'admin';
+  sender: 'client' | 'admin' | 'system';
   text: string;
   timestamp: number;
+}
+
+export interface Payment {
+  id: string;
+  amount: number;
+  date: number;
+  reference: string;
+  note?: string;
+}
+
+export enum OrderStatus {
+  QUOTE_REQUESTED = 'COTIZANDO',
+  APPROVED = 'APROBADO',
+  PAID = 'PAGADO',
+  SHIPPED = 'ENVIADO',
+  COMPLETED = 'ENTREGADO',
+  CREDIT_ACTIVE = 'CRÉDITO ACTIVO' // Nuevo estado para cuentas por cobrar
 }
 
 export interface Order {
@@ -32,21 +38,36 @@ export interface Order {
   items: { product: Injector; quantity: number }[];
   status: OrderStatus;
   customerName: string;
-  paymentProof?: string; // Base64 or reference
-  paymentReference?: string;
-  shippingMethod?: 'pickup' | 'shipping';
-  address?: string;
-  courier?: string;
-  shippingVoucher?: string;
-  rating?: number;
-  review?: string;
   chat: ChatMessage[];
   createdAt: number;
+  
+  // Datos del Cliente (Crédito)
+  clientRIF?: string;
+  clientBusinessName?: string;
+  clientPhone?: string;
+  
+  // Datos de Envío y Pago
+  shippingAddress?: string;
+  paymentReference?: string;
+  paymentProof?: string;
+  shippingReceipt?: string;
+  
+  // Sistema de Abonos
+  payments?: Payment[]; // Lista de abonos realizados
+  
+  // Calificación
+  rating?: number;
+  review?: string;
+}
+
+export interface CartItem {
+  product: Injector;
+  quantity: number;
 }
 
 export interface AppState {
   injectors: Injector[];
   orders: Order[];
-  cart: { product: Injector; quantity: number }[];
+  cart: CartItem[];
   userRole: 'client' | 'admin';
 }
