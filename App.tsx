@@ -12,12 +12,19 @@ import { Orders } from './pages/Orders';
 import { OrderDetail } from './pages/OrderDetail';
 import { AdminLogin, AdminDashboard } from './pages/Admin';
 
+// Componentes Nuevos
+import { InstallPWA } from './components/InstallPWA'; // <--- NUEVA IMPORTACIÓN
+
 const LOGO_URL = "https://i.postimg.cc/x1nHCVy8/unnamed_removebg_preview.png";
 
 // COMPONENTE WRAPPER PARA EL NAVBAR (Para ocultarlo en la bienvenida)
 const Layout: React.FC<{ children: React.ReactNode, cartCount: number, showNav: boolean }> = ({ children, cartCount, showNav }) => {
   return (
     <div className="min-h-screen flex flex-col font-['Outfit']">
+      
+      {/* BOTÓN DE INSTALACIÓN PWA (Visible en toda la app) */}
+      <InstallPWA />
+
       {showNav && (
         <nav className="bg-slate-950 text-white shadow-2xl sticky top-0 z-50 border-b border-white/5">
           <div className="max-w-7xl mx-auto px-4 h-20 flex justify-between items-center">

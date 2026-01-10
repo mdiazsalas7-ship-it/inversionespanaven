@@ -2,12 +2,20 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Panaven Inyector | Especialistas</title>
+    
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="https://i.postimg.cc/x1nHCVy8/unnamed_removebg_preview.png">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&family=Outfit:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+    
     <style>
         body { font-family: 'Outfit', sans-serif; scroll-behavior: smooth; }
         h1, h2, h3, .brand-font { font-family: 'Syncopate', sans-serif; }
@@ -19,5 +27,15 @@
 <body class="bg-slate-50 text-slate-900 selection:bg-blue-600 selection:text-white">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
+
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(reg => console.log('App lista para instalar', reg))
+            .catch(err => console.log('Error PWA', err));
+        });
+      }
+    </script>
 </body>
 </html>
