@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom'; // <--- ESTA LÍNEA ES LA QUE FALTABA
 import { Injector, CartItem } from '../types';
 
 interface CatalogProps {
@@ -12,7 +13,7 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedProduct, setSelectedProduct] = useState<Injector | null>(null);
   const [modalQty, setModalQty] = useState(1);
-  const [searchTerm, setSearchTerm] = useState(''); // ESTADO PARA LA LUPA
+  const [searchTerm, setSearchTerm] = useState(''); 
   
   const [activeMedia, setActiveMedia] = useState<string | 'video' | null>(null);
 
@@ -20,10 +21,7 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
 
   // LÓGICA DE FILTRADO (CATEGORÍA + BÚSQUEDA)
   const filtered = injectors.filter(item => {
-    // 1. Filtro de Categoría (Por ahora es simple, preparado para futuro)
     const categoryMatch = selectedCategory === 'All' ? true : true; 
-    
-    // 2. Filtro de Búsqueda (Busca en Marca, Modelo o SKU)
     const term = searchTerm.toLowerCase();
     const searchMatch = 
         item.model.toLowerCase().includes(term) || 
@@ -46,7 +44,7 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
     setActiveMedia(product.images[0]); 
   };
 
-  // --- REPRODUCTOR HÍBRIDO ---
+  // --- REPRODUCTOR HÍBRIDO (YouTube + MP4) ---
   const renderMediaPlayer = (url: string) => {
     if (!url) return null;
     const ytMatch = url.match(/(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})(?:\S+)?/);
@@ -86,7 +84,7 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
       {/* HEADER FIJO: BUSCADOR + CATEGORÍAS */}
       <div className="sticky top-0 z-40 bg-slate-50/95 backdrop-blur-md pb-2 border-b border-slate-200 shadow-sm">
          
-         {/* 1. BARRA DE BÚSQUEDA (LUPA) */}
+         {/* 1. BARRA DE BÚSQUEDA */}
          <div className="p-4 pb-2">
             <div className="relative group">
                 <span className="absolute left-4 top-3.5 text-slate-400 text-lg group-focus-within:text-blue-500 transition-colors">🔍</span>
@@ -206,8 +204,18 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
               
               <div className="space-y-3 flex-1">
                   <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 grid grid-cols-2 gap-3">
+                    
+                    {/* --- MARCA DESTACADA --- */}
+                    <div className="bg-white p-2 rounded-xl border border-slate-100">
+                        <span className="text-slate-400 block text-[8px] font-black uppercase tracking-wider mb-0.5">MARCA</span>
+                        <span className="text-blue-600 font-black text-sm uppercase">{selectedProduct.brand}</span>
+                    </div>
+
                     {Object.entries(selectedProduct.specifications).map(([key, val]) => (
-                      <div key={key}><span className="text-slate-400 block text-[8px] font-black uppercase">{key}</span><span className="text-slate-900 font-bold text-xs">{val}</span></div>
+                      <div key={key} className="bg-white p-2 rounded-xl border border-slate-100">
+                          <span className="text-slate-400 block text-[8px] font-black uppercase tracking-wider mb-0.5">{key}</span>
+                          <span className="text-slate-900 font-bold text-xs">{val}</span>
+                      </div>
                     ))}
                   </div>
                   <p className="text-slate-600 text-xs leading-relaxed">{selectedProduct.description}</p>
