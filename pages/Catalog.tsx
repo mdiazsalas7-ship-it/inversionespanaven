@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom'; // <--- ESTA LÍNEA ES LA QUE FALTABA
 import { Injector, CartItem } from '../types';
 
 interface CatalogProps {
@@ -205,7 +204,7 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
               <div className="space-y-3 flex-1">
                   <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 grid grid-cols-2 gap-3">
                     
-                    {/* --- MARCA DESTACADA --- */}
+                    {/* --- NUEVO: MARCA DESTACADA --- */}
                     <div className="bg-white p-2 rounded-xl border border-slate-100">
                         <span className="text-slate-400 block text-[8px] font-black uppercase tracking-wider mb-0.5">MARCA</span>
                         <span className="text-blue-600 font-black text-sm uppercase">{selectedProduct.brand}</span>
