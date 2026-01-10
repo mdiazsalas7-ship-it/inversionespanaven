@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom'; // <--- AGREGADO Link
 import { Order, OrderStatus, ChatMessage } from '../types';
 import ChatWindow from '../components/ChatWindow';
 import { uploadImage } from '../services/storageService';
@@ -95,7 +95,6 @@ export const OrderDetail: React.FC<DetailProps> = ({ orders, role, updateStatus,
         updateData.shippingAddress = deliveryMethod === 'pickup' ? 'RETIRO EN TIENDA' : addressInput;
         
         // Al subir capture, creamos un "Abono Automático" por el total si no existen abonos previos
-        // Esto mantiene la coherencia de las finanzas
         if (!order.payments || order.payments.length === 0) {
             updateData.payments = [{
                 id: Date.now().toString(),
@@ -131,14 +130,25 @@ export const OrderDetail: React.FC<DetailProps> = ({ orders, role, updateStatus,
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 md:space-y-10 animate-fadeIn pb-24">
-      {/* HEADER CON ESTADO Y FINANZAS */}
+      
+      {/* HEADER CON BOTÓN VOLVER + ESTADO Y FINANZAS */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-        <div>
-            <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tighter brand-font italic uppercase leading-none">Pedido #{order.id.slice(0,4)}</h1>
-            <p className="text-slate-400 font-bold text-[10px] mt-1 uppercase tracking-widest">
-                Estado: <span className="text-blue-600">{order.status}</span>
-                {order.clientBusinessName && <span className="text-slate-500"> • {order.clientBusinessName}</span>}
-            </p>
+        <div className="flex items-center gap-4">
+            {/* BOTÓN DE VOLVER INTELIGENTE */}
+            <Link 
+                to={role === 'admin' ? '/admin' : '/orders'} 
+                className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center hover:bg-slate-200 transition text-slate-600 font-black text-lg"
+            >
+                ←
+            </Link>
+            
+            <div>
+                <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tighter brand-font italic uppercase leading-none">Pedido #{order.id.slice(0,4)}</h1>
+                <p className="text-slate-400 font-bold text-[10px] mt-1 uppercase tracking-widest">
+                    Estado: <span className="text-blue-600">{order.status}</span>
+                    {order.clientBusinessName && <span className="text-slate-500"> • {order.clientBusinessName}</span>}
+                </p>
+            </div>
         </div>
         
         {/* BARRA DE DEUDA VISUAL */}
