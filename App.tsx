@@ -4,6 +4,7 @@ import { collection, onSnapshot, doc, updateDoc, addDoc, query, orderBy, setDoc 
 import { db } from './firebase';
 import { AppState, Injector, Order, OrderStatus, ChatMessage } from './types';
 import { INITIAL_INJECTORS } from './constants';
+import { getDolarRate } from './services/exchangeRateService'; // <--- NUEVO IMPORT
 
 // Páginas
 import { Catalog } from './pages/Catalog';
@@ -13,16 +14,23 @@ import { OrderDetail } from './pages/OrderDetail';
 import { AdminLogin, AdminDashboard } from './pages/Admin';
 
 // Componentes Nuevos
-import { InstallPWA } from './components/InstallPWA'; // <--- NUEVA IMPORTACIÓN
+import { InstallPWA } from './components/InstallPWA';
 
 const LOGO_URL = "https://i.postimg.cc/x1nHCVy8/unnamed_removebg_preview.png";
 
-// COMPONENTE WRAPPER PARA EL NAVBAR (Para ocultarlo en la bienvenida)
-const Layout: React.FC<{ children: React.ReactNode, cartCount: number, showNav: boolean }> = ({ children, cartCount, showNav }) => {
+// COMPONENTE WRAPPER PARA EL NAVBAR (Actualizado con Interruptor de Moneda)
+const Layout: React.FC<{ 
+    children: React.ReactNode, 
+    cartCount: number, 
+    showNav: boolean,
+    currency: 'USD' | 'VES', 
+    toggleCurrency: () => void,
+    exchangeRate: number 
+}> = ({ children, cartCount, showNav, currency, toggleCurrency, exchangeRate }) => {
   return (
     <div className="min-h-screen flex flex-col font-['Outfit']">
       
-      {/* BOTÓN DE INSTALACIÓN PWA (Visible en toda la app) */}
+      {/* BOTÓN DE INSTALACIÓN PWA */}
       <InstallPWA />
 
       {showNav && (
@@ -36,6 +44,19 @@ const Layout: React.FC<{ children: React.ReactNode, cartCount: number, showNav: 
               </div>
             </Link>
             <div className="flex items-center gap-6">
+              
+              {/* INTERRUPTOR DE MONEDA (DESKTOP) */}
+              <button 
+                onClick={toggleCurrency} 
+                className="hidden md:flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-full border border-white/10 hover:bg-white/20 transition"
+              >
+                <span className={`text-[10px] font-black ${currency === 'USD' ? 'text-green-400' : 'text-slate-400'}`}>USD</span>
+                <div className={`w-8 h-4 rounded-full relative transition-colors ${currency === 'VES' ? 'bg-blue-600' : 'bg-slate-600'}`}>
+                    <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${currency === 'VES' ? 'left-4.5' : 'left-0.5'}`}></div>
+                </div>
+                <span className={`text-[10px] font-black ${currency === 'VES' ? 'text-blue-400' : 'text-slate-400'}`}>Bs</span>
+              </button>
+
               <Link to="/orders" className="text-slate-400 hover:text-white font-bold text-xs uppercase tracking-widest hidden md:block">Mis Pedidos</Link>
               <Link to="/" className="text-red-500 hover:text-red-400 font-black text-[10px] uppercase tracking-widest border border-red-900/30 px-3 py-1 rounded-full bg-red-900/10">Salir</Link>
               <Link to="/cart" className="relative text-2xl">
@@ -43,6 +64,12 @@ const Layout: React.FC<{ children: React.ReactNode, cartCount: number, showNav: 
                 {cartCount > 0 && <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full shadow-lg animate-bounce">{cartCount}</span>}
               </Link>
             </div>
+          </div>
+          
+          {/* BARRA MÓVIL PARA LA TASA */}
+          <div className="md:hidden bg-slate-900 text-center py-1 border-t border-white/5 flex justify-between px-4 items-center">
+             <span className="text-[9px] text-slate-400 font-bold uppercase">Tasa: {exchangeRate} Bs/$</span>
+             <button onClick={toggleCurrency} className="text-[9px] font-black text-blue-400 bg-blue-900/30 px-2 py-0.5 rounded uppercase">{currency === 'USD' ? 'Ver en Bolívares' : 'Ver en Dólares'}</button>
           </div>
         </nav>
       )}
@@ -89,27 +116,46 @@ const App: React.FC = () => {
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Cargar Inyectores
+  // ESTADOS DE MONEDA Y TASA
+  const [currency, setCurrency] = useState<'USD' | 'VES'>('USD');
+  const [exchangeRate, setExchangeRate] = useState(1);
+
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "injectors"), (snapshot) => {
+    // 1. Cargar Inyectores
+    const unsubInv = onSnapshot(collection(db, "injectors"), (snapshot) => {
       const injectorsData: Injector[] = [];
       snapshot.forEach((doc) => injectorsData.push({ id: doc.id, ...doc.data() } as Injector));
       if (injectorsData.length === 0) INITIAL_INJECTORS.forEach(async (inj) => await setDoc(doc(db, "injectors", inj.id), inj));
       else setState(prev => ({ ...prev, injectors: injectorsData }));
       setLoading(false);
     });
-    return () => unsub();
-  }, []);
-
-  // Cargar Órdenes
-  useEffect(() => {
+    
+    // 2. Cargar Órdenes
     const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
-    const unsub = onSnapshot(q, (snapshot) => {
+    const unsubOrders = onSnapshot(q, (snapshot) => {
       const ordersData: Order[] = [];
       snapshot.forEach((doc) => ordersData.push({ id: doc.id, ...doc.data() } as Order));
       setState(prev => ({ ...prev, orders: ordersData }));
     });
-    return () => unsub();
+
+    // 3. CARGAR TASA (AUTOMÁTICA CON FALLBACK)
+    const loadExchangeRate = async () => {
+         // Intento obtener tasa automática del BCV
+         const autoRate = await getDolarRate('bcv');
+         
+         if (autoRate && autoRate.rate > 0) {
+            console.log(`💵 Tasa Auto-actualizada: ${autoRate.rate} (${autoRate.source})`);
+            setExchangeRate(autoRate.rate);
+         } else {
+            // Si falla API, uso la de Firebase
+            onSnapshot(doc(db, "settings", "global"), (docSnap) => {
+              if (docSnap.exists()) setExchangeRate(docSnap.data().exchangeRate || 1);
+            });
+         }
+    };
+    loadExchangeRate();
+
+    return () => { unsubInv(); unsubOrders(); };
   }, []);
 
   // Funciones Carrito y Pedidos
@@ -153,26 +199,46 @@ const App: React.FC = () => {
         updateStatus={updateStatus}
         addChat={addChat}
         removeFromCart={(id) => setState(p => ({...p, cart: p.cart.filter(i => i.product.id !== id)}))}
+        // Props nuevas
+        currency={currency}
+        toggleCurrency={() => setCurrency(prev => prev === 'USD' ? 'VES' : 'USD')}
+        exchangeRate={exchangeRate}
       />
     </HashRouter>
   );
 };
 
-// Componente separado para poder usar useLocation()
-const RoutesWrapper: React.FC<any> = ({ state, isAdminLoggedIn, setIsAdminLoggedIn, addToCart, decrementCartItem, createOrder, updateStatus, addChat, removeFromCart }) => {
+// Componente RoutesWrapper actualizado para pasar props de moneda
+const RoutesWrapper: React.FC<any> = (props) => {
   const location = useLocation();
-  // Mostrar Navbar solo si NO estamos en la home (/) ni en admin (/admin) cuando no hay login
-  const showNav = location.pathname !== '/' && (location.pathname !== '/admin' || isAdminLoggedIn);
+  const showNav = location.pathname !== '/' && (location.pathname !== '/admin' || props.isAdminLoggedIn);
+
+  // Props para el catálogo con moneda
+  const catalogProps = { 
+      injectors: props.state.injectors, 
+      cart: props.state.cart, 
+      addToCart: props.addToCart, 
+      removeFromCart: props.decrementCartItem,
+      currency: props.currency,
+      exchangeRate: props.exchangeRate
+  };
 
   return (
-    <Layout cartCount={state.cart.reduce((a:any, b:any) => a + b.quantity, 0)} showNav={showNav}>
+    <Layout 
+        cartCount={props.state.cart.reduce((a:any, b:any) => a + b.quantity, 0)} 
+        showNav={showNav}
+        currency={props.currency} 
+        toggleCurrency={props.toggleCurrency} 
+        exchangeRate={props.exchangeRate}
+    >
       <Routes>
         <Route path="/" element={<WelcomeScreen />} />
-        <Route path="/catalog" element={<Catalog injectors={state.injectors} cart={state.cart} addToCart={addToCart} removeFromCart={decrementCartItem} />} />
-        <Route path="/cart" element={<Cart cart={state.cart} removeFromCart={removeFromCart} createOrder={createOrder} />} />
-        <Route path="/orders" element={<Orders orders={state.orders} role="client" />} />
-        <Route path="/order/:id" element={<OrderDetail orders={state.orders} role={isAdminLoggedIn ? 'admin' : 'client'} updateStatus={updateStatus} addChat={addChat} />} />
-        <Route path="/admin" element={isAdminLoggedIn ? <AdminDashboard state={state} updateStatus={updateStatus} addChat={addChat} onLogout={() => setIsAdminLoggedIn(false)} /> : <AdminLogin onLogin={() => setIsAdminLoggedIn(true)} />} />
+        {/* Catálogo actualizado con props */}
+        <Route path="/catalog" element={<Catalog {...catalogProps} />} />
+        <Route path="/cart" element={<Cart cart={props.state.cart} removeFromCart={props.removeFromCart} createOrder={props.createOrder} />} />
+        <Route path="/orders" element={<Orders orders={props.state.orders} role="client" />} />
+        <Route path="/order/:id" element={<OrderDetail orders={props.state.orders} role={props.isAdminLoggedIn ? 'admin' : 'client'} updateStatus={props.updateStatus} addChat={props.addChat} />} />
+        <Route path="/admin" element={props.isAdminLoggedIn ? <AdminDashboard state={props.state} updateStatus={props.updateStatus} addChat={props.addChat} onLogout={() => props.setIsAdminLoggedIn(false)} /> : <AdminLogin onLogin={() => props.setIsAdminLoggedIn(true)} />} />
       </Routes>
     </Layout>
   );

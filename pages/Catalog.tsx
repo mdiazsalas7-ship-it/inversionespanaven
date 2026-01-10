@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Injector, CartItem } from '../types';
 
 interface CatalogProps {
@@ -6,9 +7,12 @@ interface CatalogProps {
   cart: CartItem[];
   addToCart: (product: Injector, quantity: number) => void;
   removeFromCart: (productId: string) => void;
+  // NUEVAS PROPIEDADES RECIBIDAS
+  currency: 'USD' | 'VES';
+  exchangeRate: number;
 }
 
-export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, removeFromCart }) => {
+export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, removeFromCart, currency, exchangeRate }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedProduct, setSelectedProduct] = useState<Injector | null>(null);
   const [modalQty, setModalQty] = useState(1);
@@ -17,6 +21,15 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
   const [activeMedia, setActiveMedia] = useState<string | 'video' | null>(null);
 
   const categories = ['All', 'INYECTORES'];
+
+  // --- FUNCIÓN PARA FORMATEAR PRECIO SEGÚN MONEDA ---
+  const formatPrice = (priceUsd: number) => {
+    if (currency === 'VES') {
+        const bsPrice = priceUsd * exchangeRate;
+        return `Bs ${bsPrice.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+    return `$${priceUsd.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+  };
 
   // LÓGICA DE FILTRADO (CATEGORÍA + BÚSQUEDA)
   const filtered = injectors.filter(item => {
@@ -118,22 +131,59 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
         ) : (
             filtered.map(item => {
             const qty = getQuantity(item.id);
+            const isOutOfStock = item.stock <= 0; // VERIFICAR STOCK
+
             return (
-                <div key={item.id} className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex gap-3 relative animate-slideUp">
-                <div className="w-24 h-24 bg-slate-100 rounded-xl flex-shrink-0 overflow-hidden border border-slate-100 cursor-pointer" onClick={() => openModal(item)}>
-                    <img src={item.images[0]} alt={item.model} className="w-full h-full object-cover mix-blend-multiply" />
+                <div key={item.id} className={`bg-white p-3 rounded-2xl border shadow-sm flex gap-3 relative animate-slideUp transition-all ${isOutOfStock ? 'border-slate-100 opacity-90' : 'border-slate-200'}`}>
+                
+                {/* --- FOTO DEL PRODUCTO --- */}
+                <div className="w-24 h-24 bg-slate-100 rounded-xl flex-shrink-0 overflow-hidden border border-slate-100 cursor-pointer relative" onClick={() => openModal(item)}>
+                    <img 
+                        src={item.images[0]} 
+                        alt={item.model} 
+                        // SI NO HAY STOCK: ESCALA DE GRISES Y OPACO
+                        className={`w-full h-full object-cover mix-blend-multiply transition-all ${isOutOfStock ? 'grayscale opacity-60' : ''}`} 
+                    />
+                    
+                    {/* ETIQUETA ROJA DE AGOTADO */}
+                    {isOutOfStock && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="bg-red-600/90 text-white text-[10px] font-black uppercase px-2 py-1 rounded shadow-sm border-2 border-white -rotate-12 backdrop-blur-sm tracking-widest">
+                                AGOTADO
+                            </div>
+                        </div>
+                    )}
                 </div>
+
                 <div className="flex-1 min-w-0 flex flex-col justify-between py-1">
                     <div onClick={() => openModal(item)} className="cursor-pointer">
                         <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5 block">{item.brand}</span>
-                        <h3 className="font-bold text-sm text-slate-800 leading-tight mb-1 line-clamp-2">{item.model}</h3>
-                        {item.stock === 0 ? <span className="inline-block bg-red-50 text-red-500 text-[10px] font-bold px-2 py-0.5 rounded-md border border-red-100">Agotado</span> : item.stock < 5 ? <span className="inline-block bg-red-50 text-red-500 text-[10px] font-bold px-2 py-0.5 rounded-md border border-red-100">Quedan {item.stock}</span> : <span className="inline-block bg-green-50 text-green-600 text-[10px] font-bold px-2 py-0.5 rounded-md border border-green-100">Disponible</span>}
+                        {/* NOMBRE TACHADO SI ESTÁ AGOTADO */}
+                        <h3 className={`font-bold text-sm leading-tight mb-1 line-clamp-2 ${isOutOfStock ? 'text-slate-400 line-through decoration-slate-300' : 'text-slate-800'}`}>{item.model}</h3>
+                        
+                        {/* ETIQUETA DE TEXTO */}
+                        {isOutOfStock ? (
+                             <span className="inline-block text-red-500 text-[9px] font-black uppercase tracking-wider">Sin Stock</span>
+                        ) : item.stock < 5 ? (
+                             <span className="inline-block bg-orange-50 text-orange-600 text-[9px] font-bold px-2 py-0.5 rounded-md border border-orange-100">Quedan {item.stock}</span>
+                        ) : (
+                             <span className="inline-block bg-green-50 text-green-600 text-[9px] font-bold px-2 py-0.5 rounded-md border border-green-100">Disponible</span>
+                        )}
                     </div>
-                    <div className="flex items-end justify-between mt-2"><span className="text-lg font-black text-slate-900">${item.price}</span></div>
+                    
+                    {/* PRECIO (OPACO SI NO HAY STOCK) */}
+                    <div className="flex items-end justify-between mt-2">
+                        <span className={`text-lg font-black ${currency === 'VES' ? 'text-blue-600' : 'text-slate-900'} ${isOutOfStock ? 'opacity-50' : ''}`}>
+                            {formatPrice(item.price)}
+                        </span>
+                    </div>
                 </div>
+
                 <div className="flex flex-col justify-between items-end pl-1">
                     <button onClick={() => openModal(item)} className="text-blue-400 hover:text-blue-600 p-1"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></button>
-                    {item.stock > 0 && (
+                    
+                    {/* BOTONES DE CARRITO: SOLO SI HAY STOCK */}
+                    {!isOutOfStock && (
                         <div className="flex items-center border border-slate-300 rounded-full h-8 min-w-[90px] bg-white mt-auto shadow-sm">
                             <button onClick={() => removeFromCart(item.id)} className="w-8 h-full flex items-center justify-center text-slate-400 hover:text-red-500 text-lg font-bold pb-1 active:scale-90 transition-transform">−</button>
                             <span className="flex-1 text-center font-black text-sm text-slate-900 px-1">{qty}</span>
@@ -152,7 +202,11 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
         <div className="fixed bottom-4 left-4 right-4 z-50 animate-slideUp">
             <Link to="/cart" className="bg-slate-200 text-slate-900 w-full p-1 pl-4 pr-1 rounded-full flex justify-between items-center shadow-2xl border border-slate-300 backdrop-blur-md bg-opacity-90">
                 <span className="font-bold text-slate-600 text-sm">Ver Pedido ({totalItems})</span>
-                <div className="flex items-center gap-2"><span className="font-black text-slate-900 text-lg mr-2">${totalAmount}</span><div className="bg-slate-900 w-10 h-10 rounded-full flex items-center justify-center text-white shadow-lg"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg></div></div>
+                <div className="flex items-center gap-2">
+                    {/* PRECIO TOTAL BARRA */}
+                    <span className="font-black text-slate-900 text-lg mr-2">{formatPrice(totalAmount)}</span>
+                    <div className="bg-slate-900 w-10 h-10 rounded-full flex items-center justify-center text-white shadow-lg"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg></div>
+                </div>
             </Link>
         </div>
       )}
@@ -165,14 +219,22 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
             <button onClick={() => setSelectedProduct(null)} className="absolute top-4 right-4 z-20 bg-slate-100 text-slate-900 w-8 h-8 rounded-full flex items-center justify-center font-bold shadow-md hover:bg-red-100 hover:text-red-600 transition">✕</button>
             
             {/* LADO IZQUIERDO: VISOR MULTIMEDIA */}
-            <div className="w-full md:w-1/2 bg-slate-100 p-4 flex flex-col justify-center items-center h-auto">
+            <div className="w-full md:w-1/2 bg-slate-100 p-4 flex flex-col justify-center items-center h-auto relative">
+                
+                {/* ETIQUETA AGOTADO EN MODAL TAMBIÉN */}
+                {selectedProduct.stock <= 0 && (
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 bg-red-600/90 text-white text-xl font-black uppercase px-6 py-2 rounded-xl shadow-xl border-4 border-white -rotate-12 backdrop-blur-sm tracking-widest pointer-events-none">
+                        AGOTADO
+                    </div>
+                )}
+
                 <div className="flex items-center justify-center w-full h-48 md:h-80 relative mb-4">
                     {activeMedia === 'video' && selectedProduct.youtubeUrl ? (
                         renderMediaPlayer(selectedProduct.youtubeUrl)
                     ) : (
                         <img 
                             src={activeMedia !== 'video' && activeMedia ? activeMedia : selectedProduct.images[0]} 
-                            className="max-h-full max-w-full object-contain mix-blend-multiply transition-transform duration-300 hover:scale-110 cursor-zoom-in" 
+                            className={`max-h-full max-w-full object-contain mix-blend-multiply transition-transform duration-300 hover:scale-110 cursor-zoom-in ${selectedProduct.stock <= 0 ? 'grayscale opacity-50' : ''}`} 
                         />
                     )}
                 </div>
@@ -193,18 +255,25 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
             {/* LADO DERECHO: DATOS */}
             <div className="w-full md:w-1/2 p-6 flex flex-col overflow-y-auto bg-white">
               <span className="text-blue-600 font-black text-[9px] uppercase tracking-widest">{selectedProduct.brand}</span>
-              <h2 className="text-xl font-black text-slate-900 uppercase leading-tight mt-1">{selectedProduct.model}</h2>
+              <h2 className={`text-xl font-black uppercase leading-tight mt-1 ${selectedProduct.stock <= 0 ? 'text-slate-400 line-through decoration-slate-300' : 'text-slate-900'}`}>{selectedProduct.model}</h2>
               <p className="text-xs font-bold text-slate-400 uppercase mt-1 tracking-widest">{selectedProduct.sku}</p>
               
               <div className="my-3 flex items-center gap-3">
-                  <span className="text-3xl font-black text-slate-900 tracking-tighter">${selectedProduct.price}</span>
-                  {selectedProduct.stock > 0 && <span className="bg-green-100 text-green-700 text-[9px] font-bold px-2 py-1 rounded-lg uppercase">Disponible</span>}
+                  {/* PRECIO MODAL */}
+                  <span className={`text-3xl font-black tracking-tighter ${currency === 'VES' ? 'text-blue-600' : 'text-slate-900'} ${selectedProduct.stock <= 0 ? 'opacity-50' : ''}`}>
+                    {formatPrice(selectedProduct.price)}
+                  </span>
+                  {selectedProduct.stock > 0 ? (
+                       <span className="bg-green-100 text-green-700 text-[9px] font-bold px-2 py-1 rounded-lg uppercase">Disponible</span>
+                  ) : (
+                       <span className="bg-red-100 text-red-600 text-[9px] font-bold px-2 py-1 rounded-lg uppercase border border-red-200">Sin Stock</span>
+                  )}
               </div>
               
               <div className="space-y-3 flex-1">
                   <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 grid grid-cols-2 gap-3">
                     
-                    {/* --- NUEVO: MARCA DESTACADA --- */}
+                    {/* --- MARCA DESTACADA --- */}
                     <div className="bg-white p-2 rounded-xl border border-slate-100">
                         <span className="text-slate-400 block text-[8px] font-black uppercase tracking-wider mb-0.5">MARCA</span>
                         <span className="text-blue-600 font-black text-sm uppercase">{selectedProduct.brand}</span>
@@ -221,17 +290,29 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
               </div>
 
               <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
-                 <div className="flex items-center justify-between bg-slate-50 p-2 rounded-xl">
-                    <span className="text-xs font-bold text-slate-500 ml-2">Cantidad:</span>
-                    <div className="flex items-center gap-2">
-                        <button onClick={() => setModalQty(q => Math.max(1, q - 1))} className="w-8 h-8 rounded-lg bg-white border border-slate-200 shadow-sm font-black text-slate-500 hover:text-slate-900">-</button>
-                        <span className="font-black text-lg w-6 text-center text-slate-900">{modalQty}</span>
-                        <button onClick={() => setModalQty(q => q + 1)} className="w-8 h-8 rounded-lg bg-slate-900 text-white shadow-lg shadow-slate-900/30 font-black hover:bg-black transition">+</button>
-                    </div>
-                 </div>
-                 <button onClick={() => { addToCart(selectedProduct, modalQty); setSelectedProduct(null); }} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-blue-600/30 hover:bg-blue-700 transition active:scale-95 text-xs">
-                    Agregar al Pedido (${(selectedProduct.price * modalQty).toFixed(2)})
-                 </button>
+                 
+                 {/* SI HAY STOCK: BOTONES NORMALES */}
+                 {selectedProduct.stock > 0 ? (
+                    <>
+                        <div className="flex items-center justify-between bg-slate-50 p-2 rounded-xl">
+                            <span className="text-xs font-bold text-slate-500 ml-2">Cantidad:</span>
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => setModalQty(q => Math.max(1, q - 1))} className="w-8 h-8 rounded-lg bg-white border border-slate-200 shadow-sm font-black text-slate-500 hover:text-slate-900">-</button>
+                                <span className="font-black text-lg w-6 text-center text-slate-900">{modalQty}</span>
+                                <button onClick={() => setModalQty(q => q + 1)} className="w-8 h-8 rounded-lg bg-slate-900 text-white shadow-lg shadow-slate-900/30 font-black hover:bg-black transition">+</button>
+                            </div>
+                        </div>
+                        <button onClick={() => { addToCart(selectedProduct, modalQty); setSelectedProduct(null); }} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-blue-600/30 hover:bg-blue-700 transition active:scale-95 text-xs">
+                            Agregar al Pedido ({formatPrice(selectedProduct.price * modalQty)})
+                        </button>
+                    </>
+                 ) : (
+                    // SI NO HAY STOCK: BOTÓN DESHABILITADO
+                    <button disabled className="w-full py-4 bg-slate-200 text-slate-400 rounded-2xl font-black uppercase tracking-widest cursor-not-allowed shadow-none border border-slate-300">
+                        🚫 Producto Agotado
+                    </button>
+                 )}
+
               </div>
             </div>
           </div>
