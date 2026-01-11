@@ -4,7 +4,7 @@ import { collection, onSnapshot, doc, updateDoc, addDoc, query, orderBy, setDoc 
 import { db } from './firebase';
 import { AppState, Injector, Order, OrderStatus, ChatMessage } from './types';
 import { INITIAL_INJECTORS } from './constants';
-import { getDolarRate } from './services/exchangeRateService'; // <--- NUEVO IMPORT
+import { getDolarRate } from './services/exchangeRateService';
 
 // Páginas
 import { Catalog } from './pages/Catalog';
@@ -15,10 +15,12 @@ import { AdminLogin, AdminDashboard } from './pages/Admin';
 
 // Componentes Nuevos
 import { InstallPWA } from './components/InstallPWA';
+// IMPORTAMOS EL PROVEEDOR DE NOTIFICACIONES (NUEVO)
+import { ToastProvider } from './context/ToastContext';
 
 const LOGO_URL = "https://i.postimg.cc/x1nHCVy8/unnamed_removebg_preview.png";
 
-// COMPONENTE WRAPPER PARA EL NAVBAR (Actualizado con Interruptor de Moneda)
+// COMPONENTE WRAPPER PARA EL NAVBAR
 const Layout: React.FC<{ 
     children: React.ReactNode, 
     cartCount: number, 
@@ -188,27 +190,29 @@ const App: React.FC = () => {
   if (loading) return <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900 text-white gap-4"><img src={LOGO_URL} className="w-32 h-32 animate-pulse object-contain" /><p className="font-black tracking-widest text-sm text-blue-500">CARGANDO...</p></div>;
 
   return (
-    <HashRouter>
-      <RoutesWrapper 
-        state={state} 
-        isAdminLoggedIn={isAdminLoggedIn} 
-        setIsAdminLoggedIn={setIsAdminLoggedIn}
-        addToCart={addToCart}
-        decrementCartItem={decrementCartItem}
-        createOrder={createOrder}
-        updateStatus={updateStatus}
-        addChat={addChat}
-        removeFromCart={(id) => setState(p => ({...p, cart: p.cart.filter(i => i.product.id !== id)}))}
-        // Props nuevas
-        currency={currency}
-        toggleCurrency={() => setCurrency(prev => prev === 'USD' ? 'VES' : 'USD')}
-        exchangeRate={exchangeRate}
-      />
-    </HashRouter>
+    // AQUÍ ENVOLVEMOS TODA LA APP CON EL PROVEEDOR DE NOTIFICACIONES (TOAST)
+    <ToastProvider>
+        <HashRouter>
+        <RoutesWrapper 
+            state={state} 
+            isAdminLoggedIn={isAdminLoggedIn} 
+            setIsAdminLoggedIn={setIsAdminLoggedIn}
+            addToCart={addToCart}
+            decrementCartItem={decrementCartItem}
+            createOrder={createOrder}
+            updateStatus={updateStatus}
+            addChat={addChat}
+            removeFromCart={(id) => setState(p => ({...p, cart: p.cart.filter(i => i.product.id !== id)}))}
+            currency={currency}
+            toggleCurrency={() => setCurrency(prev => prev === 'USD' ? 'VES' : 'USD')}
+            exchangeRate={exchangeRate}
+        />
+        </HashRouter>
+    </ToastProvider>
   );
 };
 
-// Componente RoutesWrapper actualizado para pasar props de moneda
+// Componente separado para poder usar useLocation()
 const RoutesWrapper: React.FC<any> = (props) => {
   const location = useLocation();
   const showNav = location.pathname !== '/' && (location.pathname !== '/admin' || props.isAdminLoggedIn);

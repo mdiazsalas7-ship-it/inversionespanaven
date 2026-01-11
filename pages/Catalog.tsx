@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Injector, CartItem } from '../types';
+// IMPORTAMOS EL HOOK DE NOTIFICACIONES
+import { useToast } from '../context/ToastContext';
 
 interface CatalogProps {
   injectors: Injector[];
   cart: CartItem[];
   addToCart: (product: Injector, quantity: number) => void;
   removeFromCart: (productId: string) => void;
-  // NUEVAS PROPIEDADES RECIBIDAS
   currency: 'USD' | 'VES';
   exchangeRate: number;
 }
@@ -20,7 +21,35 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
   
   const [activeMedia, setActiveMedia] = useState<string | 'video' | null>(null);
 
+  // ACTIVAMOS LAS NOTIFICACIONES
+  const toast = useToast();
+
   const categories = ['All', 'INYECTORES'];
+
+  // --- OBTENER CANTIDAD ACTUAL EN CARRITO ---
+  const getQuantity = (id: string) => {
+    return cart.find(item => item.product.id === id)?.quantity || 0;
+  };
+
+  // --- MANEJADOR BLINDADO DE STOCK ---
+  const handleAddToCart = (product: Injector, qtyToAdd: number) => {
+    const currentInCart = getQuantity(product.id);
+    const totalDesired = currentInCart + qtyToAdd;
+
+    // VALIDACIÓN: ¿Intenta llevar más de lo que existe?
+    if (totalDesired > product.stock) {
+        const remaining = Math.max(0, product.stock - currentInCart);
+        if (remaining === 0) {
+            toast(`⚠️ Ya tienes todo el stock en tu carrito (${product.stock})`, 'error');
+        } else {
+            toast(`⚠️ Solo quedan ${remaining} disponibles para agregar`, 'error');
+        }
+        return; // DETIENE EL PROCESO
+    }
+
+    addToCart(product, qtyToAdd);
+    toast(`✅ Agregado: ${product.model} (x${qtyToAdd})`, 'success');
+  };
 
   // --- FUNCIÓN PARA FORMATEAR PRECIO SEGÚN MONEDA ---
   const formatPrice = (priceUsd: number) => {
@@ -45,10 +74,6 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
 
   const totalAmount = cart.reduce((acc, item) => acc + (item.product.price * item.quantity), 0);
   const totalItems = cart.reduce((acc, item) => acc + item.quantity, 0);
-
-  const getQuantity = (id: string) => {
-    return cart.find(item => item.product.id === id)?.quantity || 0;
-  };
 
   const openModal = (product: Injector) => {
     setModalQty(1);
@@ -96,7 +121,6 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
       {/* HEADER FIJO: BUSCADOR + CATEGORÍAS */}
       <div className="sticky top-0 z-40 bg-slate-50/95 backdrop-blur-md pb-2 border-b border-slate-200 shadow-sm">
          
-         {/* 1. BARRA DE BÚSQUEDA */}
          <div className="p-4 pb-2">
             <div className="relative group">
                 <span className="absolute left-4 top-3.5 text-slate-400 text-lg group-focus-within:text-blue-500 transition-colors">🔍</span>
@@ -112,7 +136,6 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
             </div>
          </div>
 
-         {/* 2. PILLS DE CATEGORÍAS */}
          <div className="flex gap-2 overflow-x-auto px-4 pb-2 scrollbar-hide">
             {categories.map(cat => (
               <button key={cat} onClick={() => setSelectedCategory(cat)} className={`flex-shrink-0 px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${selectedCategory === cat ? 'bg-slate-900 text-white border-slate-900 shadow-md' : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'}`}>{cat}</button>
@@ -131,7 +154,7 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
         ) : (
             filtered.map(item => {
             const qty = getQuantity(item.id);
-            const isOutOfStock = item.stock <= 0; // VERIFICAR STOCK
+            const isOutOfStock = item.stock <= 0;
 
             return (
                 <div key={item.id} className={`bg-white p-3 rounded-2xl border shadow-sm flex gap-3 relative animate-slideUp transition-all ${isOutOfStock ? 'border-slate-100 opacity-90' : 'border-slate-200'}`}>
@@ -141,11 +164,9 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
                     <img 
                         src={item.images[0]} 
                         alt={item.model} 
-                        // SI NO HAY STOCK: ESCALA DE GRISES Y OPACO
                         className={`w-full h-full object-cover mix-blend-multiply transition-all ${isOutOfStock ? 'grayscale opacity-60' : ''}`} 
                     />
                     
-                    {/* ETIQUETA ROJA DE AGOTADO */}
                     {isOutOfStock && (
                         <div className="absolute inset-0 flex items-center justify-center">
                             <div className="bg-red-600/90 text-white text-[10px] font-black uppercase px-2 py-1 rounded shadow-sm border-2 border-white -rotate-12 backdrop-blur-sm tracking-widest">
@@ -158,10 +179,8 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
                 <div className="flex-1 min-w-0 flex flex-col justify-between py-1">
                     <div onClick={() => openModal(item)} className="cursor-pointer">
                         <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5 block">{item.brand}</span>
-                        {/* NOMBRE TACHADO SI ESTÁ AGOTADO */}
                         <h3 className={`font-bold text-sm leading-tight mb-1 line-clamp-2 ${isOutOfStock ? 'text-slate-400 line-through decoration-slate-300' : 'text-slate-800'}`}>{item.model}</h3>
                         
-                        {/* ETIQUETA DE TEXTO */}
                         {isOutOfStock ? (
                              <span className="inline-block text-red-500 text-[9px] font-black uppercase tracking-wider">Sin Stock</span>
                         ) : item.stock < 5 ? (
@@ -171,7 +190,6 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
                         )}
                     </div>
                     
-                    {/* PRECIO (OPACO SI NO HAY STOCK) */}
                     <div className="flex items-end justify-between mt-2">
                         <span className={`text-lg font-black ${currency === 'VES' ? 'text-blue-600' : 'text-slate-900'} ${isOutOfStock ? 'opacity-50' : ''}`}>
                             {formatPrice(item.price)}
@@ -182,12 +200,12 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
                 <div className="flex flex-col justify-between items-end pl-1">
                     <button onClick={() => openModal(item)} className="text-blue-400 hover:text-blue-600 p-1"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></button>
                     
-                    {/* BOTONES DE CARRITO: SOLO SI HAY STOCK */}
+                    {/* BOTONES DE CARRITO: BLINDADOS */}
                     {!isOutOfStock && (
                         <div className="flex items-center border border-slate-300 rounded-full h-8 min-w-[90px] bg-white mt-auto shadow-sm">
                             <button onClick={() => removeFromCart(item.id)} className="w-8 h-full flex items-center justify-center text-slate-400 hover:text-red-500 text-lg font-bold pb-1 active:scale-90 transition-transform">−</button>
                             <span className="flex-1 text-center font-black text-sm text-slate-900 px-1">{qty}</span>
-                            <button onClick={() => addToCart(item, 1)} className="w-8 h-full flex items-center justify-center text-slate-900 hover:text-blue-600 text-lg font-bold pb-1 active:scale-90 transition-transform">+</button>
+                            <button onClick={() => handleAddToCart(item, 1)} className="w-8 h-full flex items-center justify-center text-slate-900 hover:text-blue-600 text-lg font-bold pb-1 active:scale-90 transition-transform">+</button>
                         </div>
                     )}
                 </div>
@@ -203,7 +221,6 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
             <Link to="/cart" className="bg-slate-200 text-slate-900 w-full p-1 pl-4 pr-1 rounded-full flex justify-between items-center shadow-2xl border border-slate-300 backdrop-blur-md bg-opacity-90">
                 <span className="font-bold text-slate-600 text-sm">Ver Pedido ({totalItems})</span>
                 <div className="flex items-center gap-2">
-                    {/* PRECIO TOTAL BARRA */}
                     <span className="font-black text-slate-900 text-lg mr-2">{formatPrice(totalAmount)}</span>
                     <div className="bg-slate-900 w-10 h-10 rounded-full flex items-center justify-center text-white shadow-lg"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg></div>
                 </div>
@@ -221,7 +238,6 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
             {/* LADO IZQUIERDO: VISOR MULTIMEDIA */}
             <div className="w-full md:w-1/2 bg-slate-100 p-4 flex flex-col justify-center items-center h-auto relative">
                 
-                {/* ETIQUETA AGOTADO EN MODAL TAMBIÉN */}
                 {selectedProduct.stock <= 0 && (
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 bg-red-600/90 text-white text-xl font-black uppercase px-6 py-2 rounded-xl shadow-xl border-4 border-white -rotate-12 backdrop-blur-sm tracking-widest pointer-events-none">
                         AGOTADO
@@ -259,7 +275,6 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
               <p className="text-xs font-bold text-slate-400 uppercase mt-1 tracking-widest">{selectedProduct.sku}</p>
               
               <div className="my-3 flex items-center gap-3">
-                  {/* PRECIO MODAL */}
                   <span className={`text-3xl font-black tracking-tighter ${currency === 'VES' ? 'text-blue-600' : 'text-slate-900'} ${selectedProduct.stock <= 0 ? 'opacity-50' : ''}`}>
                     {formatPrice(selectedProduct.price)}
                   </span>
@@ -273,7 +288,6 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
               <div className="space-y-3 flex-1">
                   <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 grid grid-cols-2 gap-3">
                     
-                    {/* --- MARCA DESTACADA --- */}
                     <div className="bg-white p-2 rounded-xl border border-slate-100">
                         <span className="text-slate-400 block text-[8px] font-black uppercase tracking-wider mb-0.5">MARCA</span>
                         <span className="text-blue-600 font-black text-sm uppercase">{selectedProduct.brand}</span>
@@ -291,7 +305,7 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
 
               <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
                  
-                 {/* SI HAY STOCK: BOTONES NORMALES */}
+                 {/* CONTROLES MODAL BLINDADOS */}
                  {selectedProduct.stock > 0 ? (
                     <>
                         <div className="flex items-center justify-between bg-slate-50 p-2 rounded-xl">
@@ -299,15 +313,19 @@ export const Catalog: React.FC<CatalogProps> = ({ injectors, cart, addToCart, re
                             <div className="flex items-center gap-2">
                                 <button onClick={() => setModalQty(q => Math.max(1, q - 1))} className="w-8 h-8 rounded-lg bg-white border border-slate-200 shadow-sm font-black text-slate-500 hover:text-slate-900">-</button>
                                 <span className="font-black text-lg w-6 text-center text-slate-900">{modalQty}</span>
-                                <button onClick={() => setModalQty(q => q + 1)} className="w-8 h-8 rounded-lg bg-slate-900 text-white shadow-lg shadow-slate-900/30 font-black hover:bg-black transition">+</button>
+                                {/* CONTADOR LIMITADO AL STOCK VISUALMENTE TAMBIÉN */}
+                                <button 
+                                    onClick={() => setModalQty(q => Math.min(selectedProduct.stock, q + 1))} 
+                                    className="w-8 h-8 rounded-lg bg-slate-900 text-white shadow-lg shadow-slate-900/30 font-black hover:bg-black transition"
+                                >+</button>
                             </div>
                         </div>
-                        <button onClick={() => { addToCart(selectedProduct, modalQty); setSelectedProduct(null); }} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-blue-600/30 hover:bg-blue-700 transition active:scale-95 text-xs">
+                        {/* BOTÓN PRECIO TOTAL (USA LA VALIDACIÓN handleAddToCart) */}
+                        <button onClick={() => { handleAddToCart(selectedProduct, modalQty); setSelectedProduct(null); }} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-blue-600/30 hover:bg-blue-700 transition active:scale-95 text-xs">
                             Agregar al Pedido ({formatPrice(selectedProduct.price * modalQty)})
                         </button>
                     </>
                  ) : (
-                    // SI NO HAY STOCK: BOTÓN DESHABILITADO
                     <button disabled className="w-full py-4 bg-slate-200 text-slate-400 rounded-2xl font-black uppercase tracking-widest cursor-not-allowed shadow-none border border-slate-300">
                         🚫 Producto Agotado
                     </button>

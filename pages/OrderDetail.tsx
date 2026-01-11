@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom'; // <--- AGREGADO Link
+import { useParams, Link } from 'react-router-dom';
 import { Order, OrderStatus, ChatMessage } from '../types';
 import ChatWindow from '../components/ChatWindow';
 import { uploadImage } from '../services/storageService';
 import { WAZE_URL } from '../constants';
+// IMPORTAMOS EL HOOK DE NOTIFICACIONES
+import { useToast } from '../context/ToastContext';
+// IMPORTAMOS EL GENERADOR DE PDF (NUEVO)
+import { generateQuotePDF } from '../services/pdfService';
 
 interface DetailProps {
   orders: Order[];
@@ -16,6 +20,7 @@ export const OrderDetail: React.FC<DetailProps> = ({ orders, role, updateStatus,
   const { id } = useParams<{ id: string }>();
   const order = orders.find(o => o.id === id);
   const [uploading, setUploading] = useState(false);
+  const toast = useToast(); // ACTIVAMOS LAS NOTIFICACIONES
   
   // Estados Locales
   const [deliveryMethod, setDeliveryMethod] = useState<'shipping' | 'pickup'>('shipping');
@@ -47,9 +52,18 @@ export const OrderDetail: React.FC<DetailProps> = ({ orders, role, updateStatus,
   const totalPaid = (order.payments || []).reduce((acc, p) => acc + p.amount, 0);
   const remainingBalance = totalAmount - totalPaid;
 
+  // --- FUNCIÓN PARA DESCARGAR PDF (NUEVO) ---
+  const handleDownloadPDF = () => {
+    generateQuotePDF(order);
+    toast('📄 Descargando documento...', 'success');
+  };
+
   // --- ADMIN: REGISTRAR ABONO MANUAL ---
   const registerAbono = async () => {
-    if (!abonoAmount || !abonoRef) { alert("Falta monto o referencia"); return; }
+    if (!abonoAmount || !abonoRef) { 
+        toast("⚠️ Falta monto o referencia", 'error'); 
+        return; 
+    }
     
     const newPayment = {
       id: Date.now().toString(),
@@ -70,6 +84,7 @@ export const OrderDetail: React.FC<DetailProps> = ({ orders, role, updateStatus,
     }
 
     await updateStatus(order.id, newStatus, { payments: updatedPayments });
+    toast('💵 Abono registrado con éxito', 'success'); // NOTIFICACIÓN
     setAbonoAmount(''); 
     setAbonoRef('');
   };
@@ -80,34 +95,48 @@ export const OrderDetail: React.FC<DetailProps> = ({ orders, role, updateStatus,
     if (!file) return;
     
     if (fieldName === 'paymentProof') {
-      if (!paymentRefInput.trim()) { alert("Falta el número de referencia"); e.target.value = ''; return; }
-      if (deliveryMethod === 'shipping' && !addressInput.trim()) { alert("Falta la dirección de envío"); e.target.value = ''; return; }
+      if (!paymentRefInput.trim()) { 
+          toast("⚠️ Falta el número de referencia", 'error'); 
+          e.target.value = ''; 
+          return; 
+      }
+      if (deliveryMethod === 'shipping' && !addressInput.trim()) { 
+          toast("⚠️ Falta la dirección de envío", 'error'); 
+          e.target.value = ''; 
+          return; 
+      }
     }
 
     setUploading(true);
     const reader = new FileReader();
     reader.onloadend = async () => {
-      const url = await uploadImage(`orders/${order.id}/${fieldName}`, reader.result as string);
-      const updateData: any = { [fieldName]: url };
-      
-      if (fieldName === 'paymentProof') {
-        updateData.paymentReference = paymentRefInput;
-        updateData.shippingAddress = deliveryMethod === 'pickup' ? 'RETIRO EN TIENDA' : addressInput;
-        
-        // Al subir capture, creamos un "Abono Automático" por el total si no existen abonos previos
-        if (!order.payments || order.payments.length === 0) {
-            updateData.payments = [{
-                id: Date.now().toString(),
-                amount: totalAmount, // Asumimos pago total si es flujo normal
-                date: Date.now(),
-                reference: paymentRefInput
-            }];
-        }
+      try {
+          const url = await uploadImage(`orders/${order.id}/${fieldName}`, reader.result as string);
+          const updateData: any = { [fieldName]: url };
+          
+          if (fieldName === 'paymentProof') {
+            updateData.paymentReference = paymentRefInput;
+            updateData.shippingAddress = deliveryMethod === 'pickup' ? 'RETIRO EN TIENDA' : addressInput;
+            
+            // Al subir capture, creamos un "Abono Automático" por el total si no existen abonos previos
+            if (!order.payments || order.payments.length === 0) {
+                updateData.payments = [{
+                    id: Date.now().toString(),
+                    amount: totalAmount, // Asumimos pago total si es flujo normal
+                    date: Date.now(),
+                    reference: paymentRefInput
+                }];
+            }
 
-        if (nextStatus) updateStatus(order.id, nextStatus, updateData);
-      } 
-      else if (fieldName === 'shippingReceipt' && nextStatus) {
-        updateStatus(order.id, nextStatus, updateData);
+            if (nextStatus) updateStatus(order.id, nextStatus, updateData);
+            toast('📸 Comprobante subido', 'success'); // NOTIFICACIÓN
+          } 
+          else if (fieldName === 'shippingReceipt' && nextStatus) {
+            updateStatus(order.id, nextStatus, updateData);
+            toast('🚚 Guía enviada al cliente', 'success'); // NOTIFICACIÓN
+          }
+      } catch (error) {
+          toast('❌ Error al subir la imagen', 'error');
       }
       setUploading(false);
     };
@@ -126,6 +155,7 @@ export const OrderDetail: React.FC<DetailProps> = ({ orders, role, updateStatus,
 
   const submitRating = async () => {
     await updateStatus(order.id, OrderStatus.COMPLETED, { rating: ratingInput, review: reviewInput });
+    toast('⭐ ¡Gracias por calificar!', 'success'); // NOTIFICACIÓN
   };
 
   return (
@@ -133,7 +163,7 @@ export const OrderDetail: React.FC<DetailProps> = ({ orders, role, updateStatus,
       
       {/* HEADER CON BOTÓN VOLVER + ESTADO Y FINANZAS */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 w-full md:w-auto">
             {/* BOTÓN DE VOLVER INTELIGENTE */}
             <Link 
                 to={role === 'admin' ? '/admin' : '/orders'} 
@@ -142,8 +172,17 @@ export const OrderDetail: React.FC<DetailProps> = ({ orders, role, updateStatus,
                 ←
             </Link>
             
-            <div>
-                <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tighter brand-font italic uppercase leading-none">Pedido #{order.id.slice(0,4)}</h1>
+            <div className="flex-1">
+                <div className="flex items-center gap-3">
+                    <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tighter brand-font italic uppercase leading-none">Pedido #{order.id.slice(0,4)}</h1>
+                    {/* BOTÓN PDF DESCARGABLE SIEMPRE */}
+                    <button 
+                        onClick={handleDownloadPDF}
+                        className="bg-slate-900 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 hover:bg-black transition shadow-md"
+                    >
+                        <span>📄 PDF</span>
+                    </button>
+                </div>
                 <p className="text-slate-400 font-bold text-[10px] mt-1 uppercase tracking-widest">
                     Estado: <span className="text-blue-600">{order.status}</span>
                     {order.clientBusinessName && <span className="text-slate-500"> • {order.clientBusinessName}</span>}
@@ -152,7 +191,7 @@ export const OrderDetail: React.FC<DetailProps> = ({ orders, role, updateStatus,
         </div>
         
         {/* BARRA DE DEUDA VISUAL */}
-        <div className="bg-slate-100 rounded-xl p-2 flex gap-4 text-center">
+        <div className="bg-slate-100 rounded-xl p-2 flex gap-4 text-center w-full md:w-auto justify-between md:justify-end">
             <div><p className="text-[9px] font-black uppercase text-slate-400">Total</p><p className="text-lg font-black text-slate-900">${totalAmount}</p></div>
             <div><p className="text-[9px] font-black uppercase text-slate-400">Abonado</p><p className="text-lg font-black text-green-600">${totalPaid}</p></div>
             <div><p className="text-[9px] font-black uppercase text-slate-400">Resta</p><p className={`text-lg font-black ${remainingBalance > 0 ? 'text-red-500' : 'text-slate-300'}`}>${Math.max(0, remainingBalance)}</p></div>
@@ -227,7 +266,7 @@ export const OrderDetail: React.FC<DetailProps> = ({ orders, role, updateStatus,
                  {role === 'admin' ? (
                    <div className="bg-blue-50 p-4 rounded-xl">
                      <p className="text-xs text-blue-800 mb-3">Revisa las cantidades arriba. Si todo está correcto, aprueba.</p>
-                     <button onClick={() => updateStatus(order.id, OrderStatus.APPROVED)} className="w-full py-3 bg-blue-600 text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-lg hover:bg-blue-700">Aprobar Cotización</button>
+                     <button onClick={() => { updateStatus(order.id, OrderStatus.APPROVED); toast('✅ Cotización aprobada', 'success'); }} className="w-full py-3 bg-blue-600 text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-lg hover:bg-blue-700">Aprobar Cotización</button>
                    </div>
                  ) : (<p className="text-xs text-slate-500">Tu cotización está siendo revisada...</p>)}
                </div>

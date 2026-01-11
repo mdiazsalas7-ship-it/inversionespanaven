@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CartItem } from '../types';
+// IMPORTAMOS EL HOOK DE NOTIFICACIONES
+import { useToast } from '../context/ToastContext';
 
 interface CartProps {
   cart: CartItem[];
@@ -10,10 +12,19 @@ interface CartProps {
 
 export const Cart: React.FC<CartProps> = ({ cart, removeFromCart, createOrder }) => {
   const navigate = useNavigate();
+  // ACTIVAMOS LAS NOTIFICACIONES
+  const toast = useToast();
+  
   // Calculamos un estimado, aunque es una cotización
   const total = cart.reduce((acc, item) => acc + (item.product.price * item.quantity), 0);
   const [loadingOrder, setLoadingOrder] = useState(false);
   
+  // Función para eliminar con notificación
+  const handleRemove = (id: string) => {
+    removeFromCart(id);
+    toast('🗑️ Producto eliminado', 'info');
+  };
+
   // Si no hay nada, mostramos mensaje de vacío
   if (cart.length === 0) return (
     <div className="text-center py-20 space-y-6 animate-fadeIn">
@@ -42,7 +53,8 @@ export const Cart: React.FC<CartProps> = ({ cart, removeFromCart, createOrder })
                  <span className="text-sm font-black text-blue-600">${item.product.price * item.quantity}</span>
               </div>
             </div>
-            <button onClick={() => removeFromCart(item.product.id)} className="w-8 h-8 flex items-center justify-center text-slate-300 hover:text-red-500 text-xl">×</button>
+            {/* Botón eliminar con notificación */}
+            <button onClick={() => handleRemove(item.product.id)} className="w-8 h-8 flex items-center justify-center text-slate-300 hover:text-red-500 text-xl">×</button>
           </div>
         ))}
       </div>
@@ -70,7 +82,8 @@ export const Cart: React.FC<CartProps> = ({ cart, removeFromCart, createOrder })
                 </td>
                 <td className="p-6 text-center font-black text-slate-600">{item.quantity}</td>
                 <td className="p-6 text-right font-black text-slate-900 text-lg tracking-tighter">${item.product.price * item.quantity}</td>
-                <td className="p-6 text-right"><button onClick={() => removeFromCart(item.product.id)} className="text-slate-300 hover:text-red-500 transition text-2xl">×</button></td>
+                {/* Botón eliminar con notificación */}
+                <td className="p-6 text-right"><button onClick={() => handleRemove(item.product.id)} className="text-slate-300 hover:text-red-500 transition text-2xl">×</button></td>
               </tr>
             ))}
           </tbody>
@@ -87,10 +100,17 @@ export const Cart: React.FC<CartProps> = ({ cart, removeFromCart, createOrder })
           disabled={loadingOrder} 
           onClick={async () => { 
             setLoadingOrder(true); 
-            // 1. Crea la orden en Firebase
-            const id = await createOrder(); 
-            // 2. Redirige a la pantalla de "Detalle de Orden"
-            navigate(`/order/${id}`); 
+            try {
+                // 1. Crea la orden en Firebase
+                const id = await createOrder(); 
+                // 2. Notificación de éxito
+                toast('🚀 Pedido enviado con éxito', 'success');
+                // 3. Redirige a la pantalla de "Detalle de Orden"
+                navigate(`/order/${id}`); 
+            } catch (error) {
+                toast('❌ Error al enviar el pedido', 'error');
+                setLoadingOrder(false);
+            }
           }} 
           className="w-full md:w-auto px-6 py-4 md:px-12 md:py-6 bg-blue-600 text-white rounded-xl md:rounded-3xl font-black text-sm md:text-xl uppercase tracking-widest shadow-xl hover:bg-blue-500 transition-all transform active:scale-95"
         >
