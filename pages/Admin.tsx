@@ -60,6 +60,9 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
   // ESTADO PARA NAVEGAR EN CARPETAS DE CLIENTES
   const [selectedClientDebt, setSelectedClientDebt] = useState<any | null>(null);
   
+  // NUEVO: ESTADO PARA EL BUSCADOR DE INVENTARIO
+  const [inventorySearch, setInventorySearch] = useState('');
+
   // --- GESTIÓN DE MONEDA Y TASA ---
   const [currency, setCurrency] = useState<'USD' | 'VES'>('USD');
   const [exchangeRate, setExchangeRate] = useState(1);
@@ -121,7 +124,7 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
       if (debt > 0.01 && (order.status === OrderStatus.CREDIT_ACTIVE || order.status === OrderStatus.APPROVED || order.status === OrderStatus.SHIPPED)) {
         totalReceivable += debt;
         
-        const key = order.clientRIF || order.customerName;
+        const key = order.clientRIF || order.customerName; 
         
         if (!clientGroups[key]) {
             clientGroups[key] = {
@@ -175,6 +178,7 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
   const [saleCart, setSaleCart] = useState<{ product: Injector; quantity: number; customPrice: number }[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
 
+  // --- CARGAR DATOS AL EDITAR ---
   useEffect(() => {
     if (editingProduct) {
       setFormName(editingProduct.model); setFormBrand(editingProduct.brand); setFormSku(editingProduct.sku);
@@ -249,17 +253,16 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
     reader.readAsDataURL(files[0]);
   };
 
-  // --- LÓGICA DE VENTA MANUAL BLINDADA ---
   const updateSaleQuantity = (item: Injector, delta: number) => {
     setSaleCart(prev => {
       const existing = prev.find(i => i.product.id === item.id);
       
-      // BLINDAJE 1: Validar Stock al sumar en el UI
+      // BLINDAJE 1: Validar Stock al sumar
       if (delta > 0) {
           const currentQty = existing ? existing.quantity : 0;
           if (currentQty + 1 > item.stock) {
               toast(`⚠️ Máximo disponible: ${item.stock}`, 'error');
-              return prev; // No hacemos cambios
+              return prev; 
           }
       }
 
@@ -284,7 +287,7 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
         return; 
     }
     
-    // BLINDAJE 2: Verificación Final de Stock antes de guardar
+    // BLINDAJE 2: Verificación Final
     for (const item of saleCart) {
         if (item.quantity > item.product.stock) {
             toast(`❌ Error: Stock insuficiente para ${item.product.model}. Disp: ${item.product.stock}`, 'error');
@@ -304,7 +307,7 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
     const stockPromises = saleCart.map(item => {
         const productRef = doc(db, "injectors", item.product.id);
         return updateDoc(productRef, {
-            stock: increment(-item.quantity) // Descuenta del stock
+            stock: increment(-item.quantity) 
         });
     });
     
@@ -317,6 +320,13 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
 
   const getSaleQty = (id: string) => saleCart.find(i => i.product.id === id)?.quantity || 0;
   const saleTotal = saleCart.reduce((a,b) => a + (b.customPrice * b.quantity), 0);
+
+  // --- FILTRO DE INVENTARIO ---
+  const filteredInventory = state.injectors.filter(item => 
+    item.model.toLowerCase().includes(inventorySearch.toLowerCase()) ||
+    item.sku.toLowerCase().includes(inventorySearch.toLowerCase()) ||
+    item.brand.toLowerCase().includes(inventorySearch.toLowerCase())
+  );
 
   return (
     <div className="space-y-8 animate-fadeIn pb-24 bg-slate-50 min-h-screen">
@@ -364,27 +374,75 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
         </div>
       </header>
 
-      {/* --- VISTA: INVENTARIO --- */}
+      {/* --- VISTA: INVENTARIO (MEJORADA) --- */}
       {activeTab === 'inventory' && (
         <div className="max-w-7xl mx-auto px-4 space-y-6">
-          <div className="flex justify-between items-center">
-             <h2 className="text-xl font-black text-slate-900 uppercase">Inventario ({state.injectors.length})</h2>
-             <button onClick={() => { setEditingProduct(null); setShowProductModal(true); }} className="bg-slate-900 text-white px-4 py-2 rounded-lg font-bold text-xs uppercase shadow hover:bg-black">+ Agregar</button>
+          
+          {/* BARRA DE BÚSQUEDA Y BOTÓN AGREGAR */}
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+             <div className="relative w-full md:w-1/2">
+                <span className="absolute left-3 top-2.5 text-slate-400 text-lg">🔍</span>
+                <input 
+                    value={inventorySearch}
+                    onChange={(e) => setInventorySearch(e.target.value)}
+                    placeholder="Buscar inyector por nombre, marca o código..." 
+                    className="w-full pl-10 pr-4 py-2.5 rounded-2xl border-none shadow-sm bg-white font-bold text-slate-700 outline-none ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 transition-all placeholder:text-slate-300 placeholder:font-medium"
+                />
+             </div>
+             <div className="flex items-center gap-4 w-full md:w-auto justify-between">
+                <h2 className="text-xl font-black text-slate-900 uppercase whitespace-nowrap">Items ({filteredInventory.length})</h2>
+                <button onClick={() => { setEditingProduct(null); setShowProductModal(true); }} className="bg-slate-900 text-white px-4 py-2 rounded-lg font-bold text-xs uppercase shadow hover:bg-black whitespace-nowrap">+ Agregar</button>
+             </div>
           </div>
+
           <div className="flex flex-col gap-3">
-            {state.injectors.map(item => (
-              <div key={item.id} className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex gap-3 relative hover:border-blue-300 transition-all group">
-                <div className="w-20 h-20 bg-slate-100 rounded-xl flex-shrink-0 overflow-hidden border border-slate-100"><img src={item.images[0]} className="w-full h-full object-cover mix-blend-multiply" alt={item.model} /></div>
-                <div className="flex-1 min-w-0 flex flex-col justify-between py-1">
-                  <div><span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">{item.brand} | {item.sku}</span><h3 className="font-bold text-sm text-slate-900 leading-tight truncate">{item.model}</h3></div>
-                  <div className="flex justify-between items-end"><span className="text-lg font-black text-slate-900">{formatPrice(item.price)}</span><span className={`text-[9px] font-bold px-2 py-0.5 rounded ${item.stock < 5 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>Stock: {item.stock}</span></div>
-                </div>
-                <div className="flex flex-col justify-center pl-1 gap-2">
-                    <button onClick={() => { setEditingProduct(item); setShowProductModal(true); }} className="w-10 h-10 bg-slate-50 text-slate-400 hover:bg-blue-50 hover:text-blue-600 rounded-xl flex items-center justify-center border border-slate-200">✎</button>
-                    <button onClick={() => handleDeleteProduct(item.id)} className="w-10 h-10 bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-600 rounded-xl flex items-center justify-center border border-slate-200">🗑</button>
-                </div>
-              </div>
-            ))}
+            {filteredInventory.map(item => {
+                // LÓGICA DEL SEMÁFORO
+                let stockBadgeClass = '';
+                let stockText = '';
+                
+                if (item.stock === 0) {
+                    stockBadgeClass = 'bg-red-100 text-red-700 border border-red-200';
+                    stockText = 'AGOTADO';
+                } else if (item.stock < 10) {
+                    stockBadgeClass = 'bg-yellow-100 text-yellow-700 border border-yellow-200';
+                    stockText = `Bajo: ${item.stock}`;
+                } else {
+                    stockBadgeClass = 'bg-green-100 text-green-700 border border-green-200';
+                    stockText = `Stock: ${item.stock}`;
+                }
+
+                return (
+                  <div key={item.id} className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex gap-3 relative hover:border-blue-300 transition-all group">
+                    {/* IMAGEN CON ETIQUETA ROJA SI ESTÁ AGOTADO */}
+                    <div className="w-20 h-20 bg-slate-100 rounded-xl flex-shrink-0 overflow-hidden border border-slate-100 relative">
+                        <img src={item.images[0]} className={`w-full h-full object-cover mix-blend-multiply ${item.stock === 0 ? 'grayscale opacity-50' : ''}`} alt={item.model} />
+                        {item.stock === 0 && (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <span className="text-[8px] font-black bg-red-600 text-white px-1 py-0.5 rounded -rotate-12 shadow-sm border border-white">SIN STOCK</span>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex-1 min-w-0 flex flex-col justify-between py-1">
+                      <div>
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">{item.brand} | {item.sku}</span>
+                          <h3 className="font-bold text-sm text-slate-900 leading-tight truncate">{item.model}</h3>
+                      </div>
+                      <div className="flex justify-between items-end">
+                          <span className="text-lg font-black text-slate-900">{formatPrice(item.price)}</span>
+                          {/* ETIQUETA SEMÁFORO */}
+                          <span className={`text-[9px] font-bold px-2 py-1 rounded-lg uppercase tracking-wide ${stockBadgeClass}`}>{stockText}</span>
+                      </div>
+                    </div>
+                    <div className="flex flex-col justify-center pl-1 gap-2">
+                        <button onClick={() => { setEditingProduct(item); setShowProductModal(true); }} className="w-10 h-10 bg-slate-50 text-slate-400 hover:bg-blue-50 hover:text-blue-600 rounded-xl flex items-center justify-center border border-slate-200">✎</button>
+                        <button onClick={() => handleDeleteProduct(item.id)} className="w-10 h-10 bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-600 rounded-xl flex items-center justify-center border border-slate-200">🗑</button>
+                    </div>
+                  </div>
+                );
+            })}
+            {filteredInventory.length === 0 && <div className="text-center py-10 text-slate-400 font-bold">No encontramos productos con ese criterio.</div>}
           </div>
         </div>
       )}
@@ -398,7 +456,6 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
                         <div><p className="text-xs font-bold uppercase tracking-widest opacity-80 mb-1">Total por Cobrar</p><h2 className="text-4xl font-black tracking-tighter">{formatPrice(totalReceivable)}</h2></div>
                         <div className="text-5xl opacity-50">📂</div>
                     </div>
-                    
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {debtsByClient.length === 0 ? (
                             <div className="col-span-full text-center py-20 text-slate-400 font-bold">¡Todo limpio! No hay deudas pendientes. 🎉</div>
