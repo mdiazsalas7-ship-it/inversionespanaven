@@ -60,8 +60,7 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
   
   // URL DEL WEBHOOK DE N8N (AQUÍ PEGAS TU URL)
   // RECUERDA: Si usas el celular, localhost no sirve, pon tu IP local (ej: 192.168.1.X)
-  const N8N_URL = "http://localhost:5678/webhook/buscar-clientes"; 
-
+  const N8N_URL = "https://466f23b52557ab.lhr.life/webhook/buscar-clientes";
   // ESTADO PARA NAVEGAR EN CARPETAS DE CLIENTES
   const [selectedClientDebt, setSelectedClientDebt] = useState<any | null>(null);
   
