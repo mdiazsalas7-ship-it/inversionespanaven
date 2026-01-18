@@ -54,14 +54,24 @@ export const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
 
 // --- DASHBOARD PRINCIPAL ---
 export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addChat: any, onLogout: () => void }> = ({ state, onLogout }) => {
-  const [activeTab, setActiveTab] = useState<'inventory' | 'orders' | 'debts'>('inventory');
+  // AGREGAMOS 'leads' A LOS TABS
+  const [activeTab, setActiveTab] = useState<'inventory' | 'orders' | 'debts' | 'leads'>('inventory');
   const toast = useToast();
   
+  // URL DEL WEBHOOK DE N8N (AQUÍ PEGAS TU URL)
+  // RECUERDA: Si usas el celular, localhost no sirve, pon tu IP local (ej: 192.168.1.X)
+  const N8N_URL = "http://localhost:5678/webhook/buscar-clientes"; 
+
   // ESTADO PARA NAVEGAR EN CARPETAS DE CLIENTES
   const [selectedClientDebt, setSelectedClientDebt] = useState<any | null>(null);
   
-  // NUEVO: ESTADO PARA EL BUSCADOR DE INVENTARIO
+  // ESTADO PARA EL BUSCADOR DE INVENTARIO
   const [inventorySearch, setInventorySearch] = useState('');
+
+  // --- NUEVO: ESTADO PARA PROSPECTOS (IA) ---
+  const [aiLeads, setAiLeads] = useState<any[]>([]);
+  // ESTADO DE CARGA DEL ROBOT
+  const [isSearchingLeads, setIsSearchingLeads] = useState(false);
 
   // --- GESTIÓN DE MONEDA Y TASA ---
   const [currency, setCurrency] = useState<'USD' | 'VES'>('USD');
@@ -87,6 +97,33 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
     };
     loadExchangeRate();
   }, []);
+
+  // --- NUEVO: CARGAR PROSPECTOS DESDE FIREBASE ---
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "prospectos"), (snapshot) => {
+        const leadsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setAiLeads(leadsData);
+    });
+    return () => unsub();
+  }, []);
+
+  // --- FUNCIÓN PARA ACTIVAR EL ROBOT (N8N) ---
+  const activarRobot = async () => {
+    try {
+        setIsSearchingLeads(true);
+        toast("🤖 Activando robot de búsqueda...", "info");
+        
+        // Llamada al Webhook (GET como acordamos)
+        await fetch(N8N_URL, { method: 'GET' }); 
+        
+        toast("✅ ¡Robot activado! Buscando nuevos clientes...", "success");
+    } catch (error) {
+        toast("❌ Error conectando con el agente.", "error");
+        console.error(error);
+    } finally {
+        setIsSearchingLeads(false);
+    }
+  };
 
   const updateExchangeRateManual = async () => {
     const rate = parseFloat(newRate);
@@ -253,16 +290,17 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
     reader.readAsDataURL(files[0]);
   };
 
+  // --- LÓGICA DE VENTA MANUAL BLINDADA ---
   const updateSaleQuantity = (item: Injector, delta: number) => {
     setSaleCart(prev => {
       const existing = prev.find(i => i.product.id === item.id);
       
-      // BLINDAJE 1: Validar Stock al sumar
+      // BLINDAJE 1: Validar Stock al sumar en el UI
       if (delta > 0) {
           const currentQty = existing ? existing.quantity : 0;
           if (currentQty + 1 > item.stock) {
               toast(`⚠️ Máximo disponible: ${item.stock}`, 'error');
-              return prev; 
+              return prev; // No hacemos cambios
           }
       }
 
@@ -287,7 +325,7 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
         return; 
     }
     
-    // BLINDAJE 2: Verificación Final
+    // BLINDAJE 2: Verificación Final de Stock antes de guardar
     for (const item of saleCart) {
         if (item.quantity > item.product.stock) {
             toast(`❌ Error: Stock insuficiente para ${item.product.model}. Disp: ${item.product.stock}`, 'error');
@@ -369,6 +407,7 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
             <button onClick={() => setActiveTab('inventory')} className={`px-4 py-2 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all ${activeTab === 'inventory' ? 'bg-white text-slate-900 shadow-md' : 'text-slate-400'}`}>Inventario</button>
             <button onClick={() => { setActiveTab('debts'); setSelectedClientDebt(null); }} className={`px-4 py-2 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all ${activeTab === 'debts' ? 'bg-orange-500 text-white shadow-md' : 'text-slate-400'}`}>Deudas</button>
             <button onClick={() => setActiveTab('orders')} className={`px-4 py-2 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all ${activeTab === 'orders' ? 'bg-white text-slate-900 shadow-md' : 'text-slate-400'}`}>Pedidos</button>
+            <button onClick={() => setActiveTab('leads')} className={`px-4 py-2 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all ${activeTab === 'leads' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400'}`}>🤖 Prospectos</button>
           </div>
           <button onClick={onLogout} className="text-[10px] font-bold text-red-500 uppercase tracking-widest hover:underline px-2">Salir</button>
         </div>
@@ -377,8 +416,6 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
       {/* --- VISTA: INVENTARIO (MEJORADA) --- */}
       {activeTab === 'inventory' && (
         <div className="max-w-7xl mx-auto px-4 space-y-6">
-          
-          {/* BARRA DE BÚSQUEDA Y BOTÓN AGREGAR */}
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
              <div className="relative w-full md:w-1/2">
                 <span className="absolute left-3 top-2.5 text-slate-400 text-lg">🔍</span>
@@ -394,13 +431,10 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
                 <button onClick={() => { setEditingProduct(null); setShowProductModal(true); }} className="bg-slate-900 text-white px-4 py-2 rounded-lg font-bold text-xs uppercase shadow hover:bg-black whitespace-nowrap">+ Agregar</button>
              </div>
           </div>
-
           <div className="flex flex-col gap-3">
             {filteredInventory.map(item => {
-                // LÓGICA DEL SEMÁFORO
                 let stockBadgeClass = '';
                 let stockText = '';
-                
                 if (item.stock === 0) {
                     stockBadgeClass = 'bg-red-100 text-red-700 border border-red-200';
                     stockText = 'AGOTADO';
@@ -414,7 +448,6 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
 
                 return (
                   <div key={item.id} className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex gap-3 relative hover:border-blue-300 transition-all group">
-                    {/* IMAGEN CON ETIQUETA ROJA SI ESTÁ AGOTADO */}
                     <div className="w-20 h-20 bg-slate-100 rounded-xl flex-shrink-0 overflow-hidden border border-slate-100 relative">
                         <img src={item.images[0]} className={`w-full h-full object-cover mix-blend-multiply ${item.stock === 0 ? 'grayscale opacity-50' : ''}`} alt={item.model} />
                         {item.stock === 0 && (
@@ -423,7 +456,6 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
                             </div>
                         )}
                     </div>
-
                     <div className="flex-1 min-w-0 flex flex-col justify-between py-1">
                       <div>
                           <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">{item.brand} | {item.sku}</span>
@@ -431,7 +463,6 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
                       </div>
                       <div className="flex justify-between items-end">
                           <span className="text-lg font-black text-slate-900">{formatPrice(item.price)}</span>
-                          {/* ETIQUETA SEMÁFORO */}
                           <span className={`text-[9px] font-bold px-2 py-1 rounded-lg uppercase tracking-wide ${stockBadgeClass}`}>{stockText}</span>
                       </div>
                     </div>
@@ -495,7 +526,6 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
                                 <p className="text-4xl font-black text-red-400">{formatPrice(selectedClientDebt.totalDebt)}</p>
                             </div>
                         </div>
-
                         <div className="p-6 md:p-8 space-y-4 bg-slate-50">
                             <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Pedidos por Cobrar ({selectedClientDebt.orders.length})</h3>
                             <div className="grid gap-3">
@@ -527,6 +557,59 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
                     </div>
                 </div>
             )}
+        </div>
+      )}
+
+      {/* --- VISTA: PROSPECTOS IA (NUEVO CON BOTÓN DE BÚSQUEDA) --- */}
+      {activeTab === 'leads' && (
+        <div className="max-w-6xl mx-auto px-4 animate-fadeIn space-y-6">
+            <div className="bg-purple-600 text-white p-6 rounded-3xl shadow-lg flex justify-between items-center">
+                <div><p className="text-xs font-bold uppercase tracking-widest opacity-80 mb-1">Prospectos Encontrados</p><h2 className="text-4xl font-black tracking-tighter">{aiLeads.length}</h2></div>
+                
+                {/* BOTÓN PARA ACTIVAR EL ROBOT N8N */}
+                <button 
+                    onClick={activarRobot} 
+                    disabled={isSearchingLeads}
+                    className={`flex items-center gap-2 bg-white text-purple-600 px-6 py-3 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl transition transform active:scale-95 ${isSearchingLeads ? 'opacity-70 cursor-wait' : 'hover:bg-purple-50'}`}
+                >
+                    <span className="text-xl">{isSearchingLeads ? '⏳' : '🚀'}</span>
+                    <span>{isSearchingLeads ? 'Buscando...' : 'Buscar Clientes IA'}</span>
+                </button>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {aiLeads.length === 0 ? (
+                    <div className="col-span-full text-center py-20 text-slate-400 font-bold">La IA aún no ha encontrado prospectos hoy. Dale al botón 🚀 para buscar.</div>
+                ) : (
+                    aiLeads.map((lead) => (
+                        <div key={lead.id} className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm hover:shadow-lg transition group relative">
+                            <div className="flex items-center gap-3 mb-3">
+                                <div className="w-10 h-10 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center text-lg font-bold">?</div>
+                                <div>
+                                    <h3 className="font-black text-slate-900 uppercase text-sm leading-tight">{lead.nombre || lead.name || 'Sin Nombre'}</h3>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase">{lead.origen || 'IA Search'}</p>
+                                </div>
+                            </div>
+                            
+                            {lead.interes && (
+                                <div className="bg-slate-50 p-2 rounded-lg border border-slate-100 mb-3">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Interés detectado</p>
+                                    <p className="text-xs font-bold text-slate-700 italic">"{lead.interes}"</p>
+                                </div>
+                            )}
+
+                            <a 
+                                href={`https://wa.me/${(lead.telefono || lead.phone || '').replace(/\D/g, '')}?text=Hola ${lead.nombre || ''}, vi que estás buscando repuestos diesel. Soy Manuel de Panaven, ¿en qué te puedo ayudar?`} 
+                                target="_blank" 
+                                rel="noreferrer"
+                                className="flex items-center justify-center gap-2 w-full py-3 bg-green-500 text-white rounded-xl font-black uppercase text-xs shadow-md hover:bg-green-600 transition transform active:scale-95"
+                            >
+                                <span>💬 Contactar por WhatsApp</span>
+                            </a>
+                        </div>
+                    ))
+                )}
+            </div>
         </div>
       )}
 
