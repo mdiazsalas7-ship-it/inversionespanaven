@@ -54,23 +54,17 @@ export const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
 
 // --- DASHBOARD PRINCIPAL ---
 export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addChat: any, onLogout: () => void }> = ({ state, onLogout }) => {
-  // AGREGAMOS 'leads' A LOS TABS
   const [activeTab, setActiveTab] = useState<'inventory' | 'orders' | 'debts' | 'leads'>('inventory');
   const toast = useToast();
   
-  // URL DEL WEBHOOK DE N8N (AQUÍ PEGAS TU URL)
-  // RECUERDA: Si usas el celular, localhost no sirve, pon tu IP local (ej: 192.168.1.X)
-  const N8N_URL = "https://466f23b52557ab.lhr.life/webhook/buscar-clientes";
   // ESTADO PARA NAVEGAR EN CARPETAS DE CLIENTES
   const [selectedClientDebt, setSelectedClientDebt] = useState<any | null>(null);
   
   // ESTADO PARA EL BUSCADOR DE INVENTARIO
   const [inventorySearch, setInventorySearch] = useState('');
 
-  // --- NUEVO: ESTADO PARA PROSPECTOS (IA) ---
+  // ESTADO PARA LOS CLIENTES DE LA IA
   const [aiLeads, setAiLeads] = useState<any[]>([]);
-  // ESTADO DE CARGA DEL ROBOT
-  const [isSearchingLeads, setIsSearchingLeads] = useState(false);
 
   // --- GESTIÓN DE MONEDA Y TASA ---
   const [currency, setCurrency] = useState<'USD' | 'VES'>('USD');
@@ -97,7 +91,7 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
     loadExchangeRate();
   }, []);
 
-  // --- NUEVO: CARGAR PROSPECTOS DESDE FIREBASE ---
+  // --- CARGAR PROSPECTOS DESDE FIREBASE ---
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "prospectos"), (snapshot) => {
         const leadsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -105,24 +99,6 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
     });
     return () => unsub();
   }, []);
-
-  // --- FUNCIÓN PARA ACTIVAR EL ROBOT (N8N) ---
-  const activarRobot = async () => {
-    try {
-        setIsSearchingLeads(true);
-        toast("🤖 Activando robot de búsqueda...", "info");
-        
-        // Llamada al Webhook (GET como acordamos)
-        await fetch(N8N_URL, { method: 'GET' }); 
-        
-        toast("✅ ¡Robot activado! Buscando nuevos clientes...", "success");
-    } catch (error) {
-        toast("❌ Error conectando con el agente.", "error");
-        console.error(error);
-    } finally {
-        setIsSearchingLeads(false);
-    }
-  };
 
   const updateExchangeRateManual = async () => {
     const rate = parseFloat(newRate);
@@ -294,12 +270,12 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
     setSaleCart(prev => {
       const existing = prev.find(i => i.product.id === item.id);
       
-      // BLINDAJE 1: Validar Stock al sumar en el UI
+      // BLINDAJE 1: Validar Stock al sumar
       if (delta > 0) {
           const currentQty = existing ? existing.quantity : 0;
           if (currentQty + 1 > item.stock) {
               toast(`⚠️ Máximo disponible: ${item.stock}`, 'error');
-              return prev; // No hacemos cambios
+              return prev; 
           }
       }
 
@@ -324,7 +300,7 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
         return; 
     }
     
-    // BLINDAJE 2: Verificación Final de Stock antes de guardar
+    // BLINDAJE 2: Verificación Final de Stock
     for (const item of saleCart) {
         if (item.quantity > item.product.stock) {
             toast(`❌ Error: Stock insuficiente para ${item.product.model}. Disp: ${item.product.stock}`, 'error');
@@ -402,6 +378,7 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
           <button onClick={() => { setShowSaleModal(true); setSaleStep(1); }} className="bg-blue-600 text-white px-4 py-3 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg hover:bg-blue-700 transition flex items-center gap-2 transform active:scale-95">
              <span>📝 Nueva Venta</span>
           </button>
+          {/* BOTONES DE NAVEGACIÓN - INCLUYE PROSPECTOS */}
           <div className="flex bg-slate-100 p-1 rounded-2xl gap-1">
             <button onClick={() => setActiveTab('inventory')} className={`px-4 py-2 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all ${activeTab === 'inventory' ? 'bg-white text-slate-900 shadow-md' : 'text-slate-400'}`}>Inventario</button>
             <button onClick={() => { setActiveTab('debts'); setSelectedClientDebt(null); }} className={`px-4 py-2 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all ${activeTab === 'debts' ? 'bg-orange-500 text-white shadow-md' : 'text-slate-400'}`}>Deudas</button>
@@ -559,26 +536,17 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
         </div>
       )}
 
-      {/* --- VISTA: PROSPECTOS IA (NUEVO CON BOTÓN DE BÚSQUEDA) --- */}
+      {/* --- VISTA: PROSPECTOS IA (SIN BOTÓN MANUAL - SOLO LISTA) --- */}
       {activeTab === 'leads' && (
         <div className="max-w-6xl mx-auto px-4 animate-fadeIn space-y-6">
             <div className="bg-purple-600 text-white p-6 rounded-3xl shadow-lg flex justify-between items-center">
                 <div><p className="text-xs font-bold uppercase tracking-widest opacity-80 mb-1">Prospectos Encontrados</p><h2 className="text-4xl font-black tracking-tighter">{aiLeads.length}</h2></div>
-                
-                {/* BOTÓN PARA ACTIVAR EL ROBOT N8N */}
-                <button 
-                    onClick={activarRobot} 
-                    disabled={isSearchingLeads}
-                    className={`flex items-center gap-2 bg-white text-purple-600 px-6 py-3 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl transition transform active:scale-95 ${isSearchingLeads ? 'opacity-70 cursor-wait' : 'hover:bg-purple-50'}`}
-                >
-                    <span className="text-xl">{isSearchingLeads ? '⏳' : '🚀'}</span>
-                    <span>{isSearchingLeads ? 'Buscando...' : 'Buscar Clientes IA'}</span>
-                </button>
+                <div className="text-5xl opacity-50">🤖</div>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {aiLeads.length === 0 ? (
-                    <div className="col-span-full text-center py-20 text-slate-400 font-bold">La IA aún no ha encontrado prospectos hoy. Dale al botón 🚀 para buscar.</div>
+                    <div className="col-span-full text-center py-20 text-slate-400 font-bold">La IA aún no ha encontrado prospectos hoy. 🕵️‍♂️</div>
                 ) : (
                     aiLeads.map((lead) => (
                         <div key={lead.id} className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm hover:shadow-lg transition group relative">
@@ -597,8 +565,9 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
                                 </div>
                             )}
 
+                            {/* BOTÓN WHATSAPP MEJORADO: USA EL MENSAJE DE LA IA */}
                             <a 
-                                href={`https://wa.me/${(lead.telefono || lead.phone || '').replace(/\D/g, '')}?text=Hola ${lead.nombre || ''}, vi que estás buscando repuestos diesel. Soy Manuel de Panaven, ¿en qué te puedo ayudar?`} 
+                                href={`https://wa.me/${(lead.telefono || lead.phone || '').replace(/\D/g, '')}?text=${encodeURIComponent(lead.mensaje || 'Hola, vi tu negocio y me gustaría ofrecerte repuestos al mayor.')}`} 
                                 target="_blank" 
                                 rel="noreferrer"
                                 className="flex items-center justify-center gap-2 w-full py-3 bg-green-500 text-white rounded-xl font-black uppercase text-xs shadow-md hover:bg-green-600 transition transform active:scale-95"
