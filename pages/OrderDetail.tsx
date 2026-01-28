@@ -43,9 +43,7 @@ export const OrderDetail: React.FC<DetailProps> = ({ orders, role, updateStatus,
 
   if (!order) return <div className="text-center py-20 font-black text-slate-400">Pedido no encontrado</div>;
   
-  // --- CÁLCULOS FINANCIEROS CORREGIDOS (USANDO PRECIO MANUAL) ---
   const totalAmount = order.items.reduce((acc, item) => {
-      // Si existe un precio manual (customPrice), úsalo. Si no, usa el del producto.
       const finalPrice = item.customPrice !== undefined ? item.customPrice : item.product.price;
       return acc + (finalPrice * item.quantity);
   }, 0);
@@ -59,18 +57,9 @@ export const OrderDetail: React.FC<DetailProps> = ({ orders, role, updateStatus,
   };
 
   const registerAbono = async () => {
-    if (!abonoAmount || !abonoRef) { 
-        toast("⚠️ Falta monto o referencia", 'error'); 
-        return; 
-    }
+    if (!abonoAmount || !abonoRef) { toast("⚠️ Falta monto o referencia", 'error'); return; }
     
-    const newPayment = {
-      id: Date.now().toString(),
-      amount: Number(abonoAmount),
-      date: Date.now(),
-      reference: abonoRef
-    };
-
+    const newPayment = { id: Date.now().toString(), amount: Number(abonoAmount), date: Date.now(), reference: abonoRef };
     const currentPayments = order.payments || [];
     const updatedPayments = [...currentPayments, newPayment];
     
@@ -83,8 +72,7 @@ export const OrderDetail: React.FC<DetailProps> = ({ orders, role, updateStatus,
 
     await updateStatus(order.id, newStatus, { payments: updatedPayments });
     toast('💵 Abono registrado con éxito', 'success');
-    setAbonoAmount(''); 
-    setAbonoRef('');
+    setAbonoAmount(''); setAbonoRef('');
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, fieldName: string, nextStatus?: OrderStatus) => {
@@ -106,39 +94,43 @@ export const OrderDetail: React.FC<DetailProps> = ({ orders, role, updateStatus,
           if (fieldName === 'paymentProof') {
             updateData.paymentReference = paymentRefInput;
             updateData.shippingAddress = deliveryMethod === 'pickup' ? 'RETIRO EN TIENDA' : addressInput;
-            
             if (!order.payments || order.payments.length === 0) {
-                updateData.payments = [{
-                    id: Date.now().toString(),
-                    amount: totalAmount,
-                    date: Date.now(),
-                    reference: paymentRefInput
-                }];
+                updateData.payments = [{ id: Date.now().toString(), amount: totalAmount, date: Date.now(), reference: paymentRefInput }];
             }
-
             if (nextStatus) updateStatus(order.id, nextStatus, updateData);
             toast('📸 Comprobante subido', 'success');
-          } 
-          else if (fieldName === 'shippingReceipt' && nextStatus) {
+          } else if (fieldName === 'shippingReceipt' && nextStatus) {
             updateStatus(order.id, nextStatus, updateData);
             toast('🚚 Guía enviada al cliente', 'success');
           }
-      } catch (error) {
-          toast('❌ Error al subir la imagen', 'error');
-      }
+      } catch (error) { toast('❌ Error al subir la imagen', 'error'); }
       setUploading(false);
     };
     reader.readAsDataURL(file);
   };
 
+  // --- NUEVA LÓGICA DE EDICIÓN DE CANTIDAD ---
   const updateQuantity = async (productId: string, newQty: number) => {
     if (newQty < 1) {
-      const newItems = order.items.filter(i => i.product.id !== productId);
-      await updateStatus(order.id, order.status, { items: newItems });
+      if (window.confirm("¿Eliminar este producto de la cotización?")) {
+          const newItems = order.items.filter(i => i.product.id !== productId);
+          await updateStatus(order.id, order.status, { items: newItems });
+          toast('🗑️ Producto eliminado', 'info');
+      }
     } else {
       const newItems = order.items.map(i => i.product.id === productId ? { ...i, quantity: newQty } : i);
       await updateStatus(order.id, order.status, { items: newItems });
     }
+  };
+
+  // --- NUEVA LÓGICA DE EDICIÓN DE PRECIO (SOLO ADMIN) ---
+  const updatePrice = async (productId: string, newPriceStr: string) => {
+    const newPrice = parseFloat(newPriceStr);
+    if (isNaN(newPrice) || newPrice < 0) return; // Evitar errores
+
+    const newItems = order.items.map(i => i.product.id === productId ? { ...i, customPrice: newPrice } : i);
+    await updateStatus(order.id, order.status, { items: newItems });
+    toast('precio actualizado', 'success');
   };
 
   const submitRating = async () => {
@@ -148,7 +140,6 @@ export const OrderDetail: React.FC<DetailProps> = ({ orders, role, updateStatus,
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 md:space-y-10 animate-fadeIn pb-24">
-      
       {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
         <div className="flex items-center gap-4 w-full md:w-auto">
@@ -164,8 +155,6 @@ export const OrderDetail: React.FC<DetailProps> = ({ orders, role, updateStatus,
                 </p>
             </div>
         </div>
-        
-        {/* BARRA DE DEUDA VISUAL (CORREGIDA) */}
         <div className="bg-slate-100 rounded-xl p-2 flex gap-4 text-center w-full md:w-auto justify-between md:justify-end">
             <div><p className="text-[9px] font-black uppercase text-slate-400">Total</p><p className="text-lg font-black text-slate-900">${totalAmount.toFixed(2)}</p></div>
             <div><p className="text-[9px] font-black uppercase text-slate-400">Abonado</p><p className="text-lg font-black text-green-600">${totalPaid.toFixed(2)}</p></div>
@@ -175,40 +164,58 @@ export const OrderDetail: React.FC<DetailProps> = ({ orders, role, updateStatus,
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
         <div className="lg:col-span-2 space-y-6">
-          
-          {/* TABLA DE PRODUCTOS (CORREGIDA) */}
+          {/* TABLA DE PRODUCTOS */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
              <div className="p-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
                <h2 className="font-black text-slate-900 text-[10px] uppercase tracking-widest">Productos</h2>
-               {role === 'admin' && order.status === OrderStatus.QUOTE_REQUESTED && <span className="text-[9px] text-blue-600 font-bold bg-blue-50 px-2 py-1 rounded">MODO EDICIÓN</span>}
+               {/* INDICADOR DE EDICIÓN PARA ADMIN */}
+               {role === 'admin' && <span className="text-[9px] text-blue-600 font-bold bg-blue-50 px-2 py-1 rounded border border-blue-100 animate-pulse">✏️ MODO EDICIÓN ACTIVO</span>}
              </div>
              <div className="divide-y divide-slate-100">
                {order.items.map((item, idx) => {
-                 // LÓGICA DE PRECIO MANUAL
                  const finalPrice = item.customPrice !== undefined ? item.customPrice : item.product.price;
-                 const isCustom = item.customPrice !== undefined && item.customPrice !== item.product.price;
-
+                 
                  return (
                    <div key={idx} className="p-4 flex items-center gap-3 md:gap-4">
                      <img src={item.product.images[0]} className="w-12 h-12 rounded-lg object-cover border border-slate-100" />
-                     <div className="flex-1">
-                         <p className="font-bold text-slate-900 text-xs uppercase">{item.product.model}</p>
-                         <div className="flex items-center gap-2">
-                            <p className="text-[9px] text-slate-400 font-bold uppercase">{item.product.brand}</p>
-                            {isCustom && <span className="text-[8px] bg-yellow-100 text-yellow-700 px-1.5 rounded-full font-bold">Precio Especial</span>}
-                         </div>
+                     <div className="flex-1 min-w-0">
+                         <p className="font-bold text-slate-900 text-xs uppercase truncate">{item.product.model}</p>
+                         <p className="text-[9px] text-slate-400 font-bold uppercase">{item.product.brand}</p>
                      </div>
-                     {role === 'admin' && order.status === OrderStatus.QUOTE_REQUESTED ? (
-                       <div className="flex items-center gap-2 bg-slate-100 rounded-lg p-1">
-                         <button onClick={() => updateQuantity(item.product.id, item.quantity - 1)} className="w-6 h-6 flex items-center justify-center font-bold hover:bg-white rounded shadow-sm">-</button>
-                         <span className="text-xs font-black w-4 text-center">{item.quantity}</span>
-                         <button onClick={() => updateQuantity(item.product.id, item.quantity + 1)} className="w-6 h-6 flex items-center justify-center font-bold hover:bg-white rounded shadow-sm">+</button>
-                       </div>
-                     ) : (<div className="text-right"><span className="text-xs font-bold text-slate-500">x{item.quantity}</span></div>)}
-                     <div className="text-right">
-                        <p className="font-black text-slate-900 text-sm w-16">${(finalPrice * item.quantity).toFixed(2)}</p>
-                        {isCustom && <p className="text-[9px] text-slate-400 line-through">${(item.product.price * item.quantity).toFixed(2)}</p>}
-                     </div>
+                     
+                     {/* CONTROLES DE EDICIÓN (SOLO ADMIN) */}
+                     {role === 'admin' ? (
+                        <>
+                           {/* Cantidad */}
+                           <div className="flex items-center bg-slate-100 rounded-lg h-8">
+                             <button onClick={() => updateQuantity(item.product.id, item.quantity - 1)} className="w-8 h-full flex items-center justify-center font-bold hover:bg-slate-200 rounded-l-lg text-slate-600">-</button>
+                             <span className="text-xs font-black w-6 text-center">{item.quantity}</span>
+                             <button onClick={() => updateQuantity(item.product.id, item.quantity + 1)} className="w-8 h-full flex items-center justify-center font-bold hover:bg-slate-200 rounded-r-lg text-blue-600">+</button>
+                           </div>
+                           
+                           {/* Precio Manual */}
+                           <div className="flex flex-col items-end">
+                               <div className="flex items-center gap-1">
+                                   <span className="text-slate-400 text-xs">$</span>
+                                   <input 
+                                        type="number" 
+                                        defaultValue={finalPrice} 
+                                        onBlur={(e) => updatePrice(item.product.id, e.target.value)}
+                                        className="w-16 border-b-2 border-slate-200 text-right font-black text-sm text-blue-600 outline-none focus:border-blue-500 bg-transparent p-0"
+                                   />
+                               </div>
+                               <p className="text-[9px] text-slate-400">Total: ${(finalPrice * item.quantity).toFixed(2)}</p>
+                           </div>
+                        </>
+                     ) : (
+                        // VISTA CLIENTE (SOLO LECTURA)
+                        <>
+                            <div className="text-right"><span className="text-xs font-bold text-slate-500">x{item.quantity}</span></div>
+                            <div className="text-right">
+                                <p className="font-black text-slate-900 text-sm w-16">${(finalPrice * item.quantity).toFixed(2)}</p>
+                            </div>
+                        </>
+                     )}
                    </div>
                  );
                })}
@@ -241,7 +248,7 @@ export const OrderDetail: React.FC<DetailProps> = ({ orders, role, updateStatus,
              </div>
           ) : null}
 
-          {/* ESTADOS DEL PEDIDO */}
+          {/* VISTAS DE ESTADO (MANTENIDAS) */}
           {order.status === OrderStatus.QUOTE_REQUESTED && (
                <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-100 text-center space-y-4">
                  <h3 className="font-black text-slate-900 uppercase">Cotización en Revisión</h3>
