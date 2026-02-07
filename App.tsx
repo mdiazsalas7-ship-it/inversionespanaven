@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { HashRouter, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
+import { HashRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { collection, onSnapshot, doc, updateDoc, addDoc, query, orderBy, setDoc } from "firebase/firestore";
 import { db } from './firebase';
 import { AppState, Injector, Order, OrderStatus, ChatMessage } from './types';
@@ -15,12 +15,11 @@ import { AdminLogin, AdminDashboard } from './pages/Admin';
 
 // Componentes Nuevos
 import { InstallPWA } from './components/InstallPWA';
-// IMPORTAMOS EL PROVEEDOR DE NOTIFICACIONES (NUEVO)
 import { ToastProvider } from './context/ToastContext';
 
 const LOGO_URL = "https://i.postimg.cc/x1nHCVy8/unnamed_removebg_preview.png";
 
-// COMPONENTE WRAPPER PARA EL NAVBAR
+// COMPONENTE WRAPPER PARA EL NAVBAR (DISEÑO AJUSTADO)
 const Layout: React.FC<{ 
     children: React.ReactNode, 
     cartCount: number, 
@@ -32,38 +31,53 @@ const Layout: React.FC<{
   return (
     <div className="min-h-screen flex flex-col font-['Outfit']">
       
-      {/* BOTÓN DE INSTALACIÓN PWA */}
       <InstallPWA />
 
       {showNav && (
         <nav className="bg-slate-950 text-white shadow-2xl sticky top-0 z-50 border-b border-white/5">
-          <div className="max-w-7xl mx-auto px-4 h-20 flex justify-between items-center">
-            <Link to="/catalog" className="flex items-center gap-3 group">
-              <img src={LOGO_URL} alt="Logo" className="h-12 w-12 object-contain filter drop-shadow-[0_0_8px_rgba(59,130,246,0.5)] transition-transform group-hover:scale-110" />
+          {/* Usamos gap-2 en móvil y gap-6 en PC para evitar choques */}
+          <div className="max-w-7xl mx-auto px-3 md:px-4 h-16 md:h-20 flex justify-between items-center">
+            
+            {/* IZQUIERDA: LOGO + NOMBRE */}
+            <Link to="/catalog" className="flex items-center gap-2 md:gap-3 group flex-shrink-0">
+              <img src={LOGO_URL} alt="Logo" className="h-8 w-8 md:h-12 md:w-12 object-contain filter drop-shadow-[0_0_8px_rgba(59,130,246,0.5)] transition-transform group-hover:scale-110" />
               <div className="flex flex-col">
-                <span className="text-xl font-black text-white tracking-tighter italic leading-none">PANAVEN</span>
-                <span className="text-[8px] text-blue-500 font-bold uppercase tracking-[0.4em]">Inyectores</span>
+                {/* Texto más pequeño en móvil */}
+                <span className="text-lg md:text-xl font-black text-white tracking-tighter italic leading-none">PANAVEN</span>
+                <span className="text-[7px] md:text-[8px] text-blue-500 font-bold uppercase tracking-[0.3em] md:tracking-[0.4em]">Inyectores</span>
               </div>
             </Link>
-            <div className="flex items-center gap-6">
+
+            {/* DERECHA: SWITCH + SALIR + CART */}
+            <div className="flex items-center gap-2 md:gap-6 flex-shrink-0">
               
-              {/* INTERRUPTOR DE MONEDA (AHORA VISIBLE SIEMPRE) */}
+              {/* INTERRUPTOR DE MONEDA (AJUSTADO PARA MÓVIL) */}
               <button 
                 onClick={toggleCurrency} 
-                className="flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-full border border-white/10 hover:bg-white/20 transition"
+                className="flex items-center gap-1 md:gap-2 bg-white/10 px-2 py-1 md:px-3 md:py-1.5 rounded-full border border-white/10 hover:bg-white/20 transition"
               >
-                <span className={`text-[10px] font-black ${currency === 'USD' ? 'text-green-400' : 'text-slate-400'}`}>USD</span>
-                <div className={`w-8 h-4 rounded-full relative transition-colors ${currency === 'VES' ? 'bg-blue-600' : 'bg-slate-600'}`}>
-                    <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${currency === 'VES' ? 'left-4.5' : 'left-0.5'}`}></div>
+                {/* Texto USD/Bs un poco más pequeño en móvil */}
+                <span className={`text-[8px] md:text-[10px] font-black ${currency === 'USD' ? 'text-green-400' : 'text-slate-400'}`}>$</span>
+                
+                {/* Switch visual */}
+                <div className={`w-6 h-3 md:w-8 md:h-4 rounded-full relative transition-colors ${currency === 'VES' ? 'bg-blue-600' : 'bg-slate-600'}`}>
+                    <div className={`absolute top-0.5 w-2 h-2 md:w-3 md:h-3 bg-white rounded-full transition-all ${currency === 'VES' ? 'left-3.5 md:left-4.5' : 'left-0.5'}`}></div>
                 </div>
-                <span className={`text-[10px] font-black ${currency === 'VES' ? 'text-blue-400' : 'text-slate-400'}`}>Bs</span>
+                
+                <span className={`text-[8px] md:text-[10px] font-black ${currency === 'VES' ? 'text-blue-400' : 'text-slate-400'}`}>Bs</span>
               </button>
 
               <Link to="/orders" className="text-slate-400 hover:text-white font-bold text-xs uppercase tracking-widest hidden md:block">Mis Pedidos</Link>
-              <Link to="/" className="text-red-500 hover:text-red-400 font-black text-[10px] uppercase tracking-widest border border-red-900/30 px-3 py-1 rounded-full bg-red-900/10">Salir</Link>
-              <Link to="/cart" className="relative text-2xl">
+              
+              {/* BOTÓN SALIR: ÍCONO EN MÓVIL, TEXTO EN PC */}
+              <Link to="/" className="text-red-500 hover:text-red-400 font-black text-[10px] uppercase tracking-widest border border-red-900/30 px-2 py-1 md:px-3 md:py-1 rounded-full bg-red-900/10 flex items-center justify-center">
+                  <span className="hidden md:inline">Salir</span>
+                  <span className="md:hidden">🚪</span>
+              </Link>
+
+              <Link to="/cart" className="relative text-xl md:text-2xl">
                 🛒
-                {cartCount > 0 && <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full shadow-lg animate-bounce">{cartCount}</span>}
+                {cartCount > 0 && <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-[9px] md:text-[10px] font-black px-1.5 py-0.5 rounded-full shadow-lg animate-bounce">{cartCount}</span>}
               </Link>
             </div>
           </div>
@@ -76,7 +90,6 @@ const Layout: React.FC<{
   );
 };
 
-// PANTALLA DE BIENVENIDA (LANDING)
 const WelcomeScreen: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 animate-fadeIn relative overflow-hidden">
@@ -136,14 +149,11 @@ const App: React.FC = () => {
 
     // 3. CARGAR TASA (AUTOMÁTICA CON FALLBACK)
     const loadExchangeRate = async () => {
-         // Intento obtener tasa automática del BCV
          const autoRate = await getDolarRate('bcv');
-         
          if (autoRate && autoRate.rate > 0) {
             console.log(`💵 Tasa Auto-actualizada: ${autoRate.rate} (${autoRate.source})`);
             setExchangeRate(autoRate.rate);
          } else {
-            // Si falla API, uso la de Firebase
             onSnapshot(doc(db, "settings", "global"), (docSnap) => {
               if (docSnap.exists()) setExchangeRate(docSnap.data().exchangeRate || 1);
             });
@@ -154,7 +164,6 @@ const App: React.FC = () => {
     return () => { unsubInv(); unsubOrders(); };
   }, []);
 
-  // Funciones Carrito y Pedidos
   const addToCart = (product: Injector, quantity: number = 1) => {
     setState(prev => {
       const existing = prev.cart.find(item => item.product.id === product.id);
@@ -184,7 +193,6 @@ const App: React.FC = () => {
   if (loading) return <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900 text-white gap-4"><img src={LOGO_URL} className="w-32 h-32 animate-pulse object-contain" /><p className="font-black tracking-widest text-sm text-blue-500">CARGANDO...</p></div>;
 
   return (
-    // AQUÍ ENVOLVEMOS TODA LA APP CON EL PROVEEDOR DE NOTIFICACIONES (TOAST)
     <ToastProvider>
         <HashRouter>
         <RoutesWrapper 
@@ -206,12 +214,10 @@ const App: React.FC = () => {
   );
 };
 
-// Componente separado para poder usar useLocation()
 const RoutesWrapper: React.FC<any> = (props) => {
   const location = useLocation();
   const showNav = location.pathname !== '/' && (location.pathname !== '/admin' || props.isAdminLoggedIn);
 
-  // Props para el catálogo con moneda
   const catalogProps = { 
       injectors: props.state.injectors, 
       cart: props.state.cart, 
@@ -231,7 +237,6 @@ const RoutesWrapper: React.FC<any> = (props) => {
     >
       <Routes>
         <Route path="/" element={<WelcomeScreen />} />
-        {/* Catálogo actualizado con props */}
         <Route path="/catalog" element={<Catalog {...catalogProps} />} />
         <Route path="/cart" element={<Cart cart={props.state.cart} removeFromCart={props.removeFromCart} createOrder={props.createOrder} />} />
         <Route path="/orders" element={<Orders orders={props.state.orders} role="client" />} />
