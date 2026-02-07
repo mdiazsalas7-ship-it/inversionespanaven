@@ -47,10 +47,10 @@ const Layout: React.FC<{
             </Link>
             <div className="flex items-center gap-6">
               
-              {/* INTERRUPTOR DE MONEDA (DESKTOP) */}
+              {/* INTERRUPTOR DE MONEDA (AHORA VISIBLE SIEMPRE) */}
               <button 
                 onClick={toggleCurrency} 
-                className="hidden md:flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-full border border-white/10 hover:bg-white/20 transition"
+                className="flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-full border border-white/10 hover:bg-white/20 transition"
               >
                 <span className={`text-[10px] font-black ${currency === 'USD' ? 'text-green-400' : 'text-slate-400'}`}>USD</span>
                 <div className={`w-8 h-4 rounded-full relative transition-colors ${currency === 'VES' ? 'bg-blue-600' : 'bg-slate-600'}`}>
@@ -66,12 +66,6 @@ const Layout: React.FC<{
                 {cartCount > 0 && <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full shadow-lg animate-bounce">{cartCount}</span>}
               </Link>
             </div>
-          </div>
-          
-          {/* BARRA MÓVIL PARA LA TASA */}
-          <div className="md:hidden bg-slate-900 text-center py-1 border-t border-white/5 flex justify-between px-4 items-center">
-             <span className="text-[9px] text-slate-400 font-bold uppercase">Tasa: {exchangeRate} Bs/$</span>
-             <button onClick={toggleCurrency} className="text-[9px] font-black text-blue-400 bg-blue-900/30 px-2 py-0.5 rounded uppercase">{currency === 'USD' ? 'Ver en Bolívares' : 'Ver en Dólares'}</button>
           </div>
         </nav>
       )}
