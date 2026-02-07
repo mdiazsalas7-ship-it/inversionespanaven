@@ -6,8 +6,6 @@ import { AppState, Injector, Order, OrderStatus } from '../types';
 import { generateProductData } from '../services/geminiService';
 import { uploadImage } from '../services/storageService';
 import { generateQuotePDF } from '../services/pdfService';
-import { getDolarRate } from '../services/exchangeRateService';
-// IMPORTAMOS EL HOOK DE NOTIFICACIONES
 import { useToast } from '../context/ToastContext';
 
 const LOGO_URL = "https://i.postimg.cc/x1nHCVy8/unnamed_removebg_preview.png";
@@ -57,13 +55,8 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
   const [activeTab, setActiveTab] = useState<'inventory' | 'orders' | 'debts' | 'leads'>('inventory');
   const toast = useToast();
   
-  // ESTADO PARA NAVEGAR EN CARPETAS DE CLIENTES
   const [selectedClientDebt, setSelectedClientDebt] = useState<any | null>(null);
-  
-  // ESTADO PARA EL BUSCADOR DE INVENTARIO
   const [inventorySearch, setInventorySearch] = useState('');
-
-  // ESTADO PARA LOS CLIENTES DE LA IA
   const [aiLeads, setAiLeads] = useState<any[]>([]);
 
   // --- GESTIÓN DE MONEDA Y TASA ---
@@ -71,24 +64,46 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
   const [exchangeRate, setExchangeRate] = useState(1);
   const [newRate, setNewRate] = useState('');
 
-  // Cargar tasa automática al iniciar
+  // 1. CARGAR TASA MANUAL (FIREBASE) + AUTOMÁTICA (EURO BCV)
   useEffect(() => {
-    const loadExchangeRate = async () => {
-        const autoRate = await getDolarRate('bcv');
-        if (autoRate && autoRate.rate > 0) {
-            setExchangeRate(autoRate.rate);
-            setNewRate(autoRate.rate.toString());
-            setDoc(doc(db, "settings", "global"), { exchangeRate: autoRate.rate }, { merge: true });
-        } else {
-            onSnapshot(doc(db, "settings", "global"), (doc) => {
-                if (doc.exists()) {
-                    setExchangeRate(doc.data().exchangeRate || 1);
-                    setNewRate(doc.data().exchangeRate?.toString() || '');
+    // A. Escuchar cambios en Firebase
+    const unsub = onSnapshot(doc(db, "settings", "global"), (docSnap) => {
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            if (data.exchangeRate) {
+                setExchangeRate(data.exchangeRate);
+                setNewRate(data.exchangeRate.toString());
+            }
+        }
+    });
+
+    // B. Función para buscar el EURO BCV Automáticamente
+    const fetchEuroRate = async () => {
+        try {
+            const response = await fetch('https://pydolarvenezuela-api.vercel.app/api/v1/dollar?page=bcv');
+            if (response.ok) {
+                const data = await response.json();
+                
+                // --- AQUÍ ESTABA EL ERROR ANTES ---
+                // Ahora buscamos SOLO el Euro ('eur'). Si no hay, no pone nada.
+                const euroPrice = data.monitors?.eur?.price; 
+
+                if (euroPrice && euroPrice > 0) {
+                    console.log("Tasa EURO detectada:", euroPrice);
+                    // Actualizamos Firebase automáticamente
+                    await setDoc(doc(db, "settings", "global"), { exchangeRate: euroPrice }, { merge: true });
+                    toast(`💶 Tasa EURO actualizada: ${euroPrice}`, 'success');
+                } else {
+                    console.warn("La API no devolvió el precio del Euro");
                 }
-            });
+            }
+        } catch (error) {
+            console.error("Error buscando tasa automática:", error);
         }
     };
-    loadExchangeRate();
+
+    fetchEuroRate();
+    return () => unsub();
   }, []);
 
   // --- CARGAR PROSPECTOS DESDE FIREBASE ---
@@ -107,8 +122,7 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
         return;
     }
     await setDoc(doc(db, "settings", "global"), { exchangeRate: rate }, { merge: true });
-    setExchangeRate(rate);
-    toast(`💵 Tasa manual actualizada: ${rate} Bs/$`, 'success');
+    toast(`💶 Tasa (Euro) manual actualizada: ${rate} Bs/€`, 'success');
   };
 
   // FUNCIÓN PARA FORMATEAR PRECIO
@@ -135,41 +149,24 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
 
       if (debt > 0.01 && (order.status === OrderStatus.CREDIT_ACTIVE || order.status === OrderStatus.APPROVED || order.status === OrderStatus.SHIPPED)) {
         totalReceivable += debt;
-        
         const key = order.clientRIF || order.customerName; 
-        
         if (!clientGroups[key]) {
-            clientGroups[key] = {
-                name: order.customerName,
-                rif: order.clientRIF,
-                phone: order.clientPhone,
-                totalDebt: 0,
-                orders: []
-            };
+            clientGroups[key] = { name: order.customerName, rif: order.clientRIF, phone: order.clientPhone, totalDebt: 0, orders: [] };
         }
-        
         clientGroups[key].totalDebt += debt;
         clientGroups[key].orders.push(order);
       }
     });
-
-    return { 
-        debtsByClient: Object.values(clientGroups), 
-        totalReceivable, 
-        income 
-    };
+    return { debtsByClient: Object.values(clientGroups), totalReceivable, income };
   }, [state.orders]);
 
   // Estados Modales
   const [showProductModal, setShowProductModal] = useState(false);
   const [showSaleModal, setShowSaleModal] = useState(false);
-  
-  // Estados Producto
   const [editingProduct, setEditingProduct] = useState<Injector | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isUploading, setIsUploading] = useState([false, false, false]);
   
-  // Campos del Formulario
   const [formName, setFormName] = useState('');
   const [formBrand, setFormBrand] = useState('');
   const [formSku, setFormSku] = useState('');
@@ -182,7 +179,6 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
   const [techFlow, setTechFlow] = useState('');
   const [formImages, setFormImages] = useState<string[]>(['', '', '']);
 
-  // ESTADOS NUEVA VENTA
   const [saleStep, setSaleStep] = useState(1);
   const [saleClientName, setSaleClientName] = useState('');
   const [saleClientRif, setSaleClientRif] = useState('');
@@ -190,7 +186,6 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
   const [saleCart, setSaleCart] = useState<{ product: Injector; quantity: number; customPrice: number }[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // --- CARGAR DATOS AL EDITAR ---
   useEffect(() => {
     if (editingProduct) {
       setFormName(editingProduct.model); setFormBrand(editingProduct.brand); setFormSku(editingProduct.sku);
@@ -265,12 +260,9 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
     reader.readAsDataURL(files[0]);
   };
 
-  // --- LÓGICA DE VENTA MANUAL BLINDADA ---
   const updateSaleQuantity = (item: Injector, delta: number) => {
     setSaleCart(prev => {
       const existing = prev.find(i => i.product.id === item.id);
-      
-      // BLINDAJE 1: Validar Stock al sumar
       if (delta > 0) {
           const currentQty = existing ? existing.quantity : 0;
           if (currentQty + 1 > item.stock) {
@@ -278,7 +270,6 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
               return prev; 
           }
       }
-
       if (existing) {
         const newQty = existing.quantity + delta;
         if (newQty <= 0) return prev.filter(i => i.product.id !== item.id);
@@ -295,37 +286,24 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
   };
 
   const createPremiumOrder = async () => {
-    if (!saleClientName || !saleClientRif || saleCart.length === 0) { 
-        toast("⚠️ Faltan datos del cliente o productos", 'error'); 
-        return; 
-    }
-    
-    // BLINDAJE 2: Verificación Final de Stock
+    if (!saleClientName || !saleClientRif || saleCart.length === 0) { toast("⚠️ Faltan datos del cliente o productos", 'error'); return; }
     for (const item of saleCart) {
         if (item.quantity > item.product.stock) {
             toast(`❌ Error: Stock insuficiente para ${item.product.model}. Disp: ${item.product.stock}`, 'error');
             return;
         }
     }
-
     const itemsForDB = saleCart.map(item => ({ quantity: item.quantity, product: item.product, customPrice: item.customPrice }));
     const orderData: Omit<Order, 'id'> = {
       items: itemsForDB as any, status: OrderStatus.CREDIT_ACTIVE, customerName: saleClientName, clientRIF: saleClientRif,
       clientBusinessName: "Venta Directa Admin", clientPhone: saleClientPhone, chat: [], createdAt: Date.now(), payments: []
     };
-
     const docRef = await addDoc(collection(db, "orders"), orderData);
-
-    // BLINDAJE 3: DESCONTAR INVENTARIO
     const stockPromises = saleCart.map(item => {
         const productRef = doc(db, "injectors", item.product.id);
-        return updateDoc(productRef, {
-            stock: increment(-item.quantity) 
-        });
+        return updateDoc(productRef, { stock: increment(-item.quantity) });
     });
-    
     await Promise.all(stockPromises);
-
     generateQuotePDF({ ...orderData, id: docRef.id } as Order);
     setShowSaleModal(false); setSaleCart([]); setSaleClientName(''); setSaleClientRif(''); setSaleClientPhone(''); setSaleStep(1);
     toast("✅ Venta registrada y Stock actualizado", 'success');
@@ -334,7 +312,6 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
   const getSaleQty = (id: string) => saleCart.find(i => i.product.id === id)?.quantity || 0;
   const saleTotal = saleCart.reduce((a,b) => a + (b.customPrice * b.quantity), 0);
 
-  // --- FILTRO DE INVENTARIO ---
   const filteredInventory = state.injectors.filter(item => 
     item.model.toLowerCase().includes(inventorySearch.toLowerCase()) ||
     item.sku.toLowerCase().includes(inventorySearch.toLowerCase()) ||
@@ -355,9 +332,9 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
             <div className="flex flex-wrap gap-2 items-center justify-center md:justify-start mt-1">
               <span className="text-[10px] font-black text-green-600 bg-green-50 px-2 py-1 rounded-lg">Caja: {formatPrice(income)}</span>
               
-              {/* CONFIG TASA MANUAL */}
+              {/* CONFIG TASA MANUAL - ETIQUETA EURO */}
                <div className="flex items-center bg-slate-100 rounded-lg p-1">
-                 <span className="text-[9px] font-bold text-slate-500 uppercase px-2">Tasa:</span>
+                 <span className="text-[9px] font-bold text-slate-500 uppercase px-2">Tasa (€):</span>
                  <input type="number" value={newRate} onChange={e => setNewRate(e.target.value)} className="w-16 bg-white border border-slate-300 rounded px-1 text-xs font-black text-center outline-none focus:border-blue-500" />
                  <button onClick={updateExchangeRateManual} className="text-[9px] bg-slate-200 text-slate-600 px-2 py-1 rounded ml-1 font-bold hover:bg-slate-300">✎</button>
                </div>
@@ -378,7 +355,7 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
           <button onClick={() => { setShowSaleModal(true); setSaleStep(1); }} className="bg-blue-600 text-white px-4 py-3 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg hover:bg-blue-700 transition flex items-center gap-2 transform active:scale-95">
              <span>📝 Nueva Venta</span>
           </button>
-          {/* BOTONES DE NAVEGACIÓN - INCLUYE PROSPECTOS */}
+          {/* BOTONES DE NAVEGACIÓN */}
           <div className="flex bg-slate-100 p-1 rounded-2xl gap-1">
             <button onClick={() => setActiveTab('inventory')} className={`px-4 py-2 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all ${activeTab === 'inventory' ? 'bg-white text-slate-900 shadow-md' : 'text-slate-400'}`}>Inventario</button>
             <button onClick={() => { setActiveTab('debts'); setSelectedClientDebt(null); }} className={`px-4 py-2 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all ${activeTab === 'debts' ? 'bg-orange-500 text-white shadow-md' : 'text-slate-400'}`}>Deudas</button>
@@ -393,6 +370,7 @@ export const AdminDashboard: React.FC<{ state: AppState, updateStatus: any, addC
       {activeTab === 'inventory' && (
         <div className="max-w-7xl mx-auto px-4 space-y-6">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+             {/* BARRA DE BÚSQUEDA */}
              <div className="relative w-full md:w-1/2">
                 <span className="absolute left-3 top-2.5 text-slate-400 text-lg">🔍</span>
                 <input 
